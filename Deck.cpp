@@ -58,3 +58,9 @@ Deck Deck::shuffleDeck() {
     randomize(cardsCopy);
     return Deck(cardsCopy);
 }
+
+Card Deck::dealCard() {
+    Card dealtCard = cards.back();
+    cards.pop_back();
+    return dealtCard;
+}

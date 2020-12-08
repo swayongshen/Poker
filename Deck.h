@@ -11,6 +11,7 @@ class Deck {
         Deck(std::vector<Card> cards);
         void enumerateCards();
         Deck shuffleDeck();
+        Card dealCard();
 };
 
 #endif
