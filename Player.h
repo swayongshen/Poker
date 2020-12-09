@@ -13,6 +13,7 @@ class Player {
     public:
         Player(std::string name);
         void receiveDeal(Card card);
+        std::vector<Card>& getHand();
 };
 
 #endif

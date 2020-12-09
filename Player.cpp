@@ -12,3 +12,7 @@ void Player::receiveDeal(Card card) {
     hand.push_back(card);
 }
 
+std::vector<Card>& Player::getHand() {
+    return hand;
+}
+

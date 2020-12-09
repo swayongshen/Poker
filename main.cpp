@@ -1,11 +1,16 @@
 #include <iostream>
-#include "Deck.h"
-#include "Card.h"
+#include "Game.h"
 
 int main() {
-    Deck deck = Deck();
-    deck.enumerateCards();
-    deck = deck.shuffleDeck();
-    std::cout << "------------------------------------";
-    deck.enumerateCards();
+    //Start new game
+    Game game = Game();
+
+    game.addPlayer("player1");
+    game.addPlayer("player2");
+
+    game.firstDeal();
+
+    game.test();
+    
+
 }
