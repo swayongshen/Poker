@@ -23,9 +23,9 @@ int Game::hasFlush(Player player) {
             if (pair.second >= 5) {
                 std::vector<Card> cardsOfSuit;
                 int suit = pair.first;
-                std::copy_if(cards.begin(), cards.end(), cardsOfSuit.begin(), [&suit](Card card) {return card.getSuit() == suit;});
+                std::copy_if(cards.begin(), cards.end(), std::back_inserter(cardsOfSuit), [suit](Card card) -> bool {return card.getSuit() == suit;});
                 //If Ace exists, return ace, else, return max
-                if (std::count_if(cards.begin(), cards.end(), [](Card card) {return card.getRank() == 1;}) == 1) {
+                if (std::count_if(cards.begin(), cards.end(), [](Card card) {return card.getRank() == 1; std::cout << "reach2";}) == 1) {
                     return 1;
                 } else {
                     Card maxCard = *std::max_element(cards.begin(), cards.end(), [](Card cardA, Card cardB) {return cardA.getRank() < cardB.getRank();});
@@ -41,12 +41,13 @@ int Game::hasFlush(Player player) {
 }
 
 void Game::test() {
+
     for (int i = 0; i < 5; i++) {
         river.push_back(deck.dealCard());
         std::cout << river[i] << std::endl;
     }
 
-    for (Card card : players[0].getHand()) {
+    for (Card& card : players[0].getHand()) {
         std::cout << card << std::endl;
     }
 
@@ -70,7 +71,7 @@ void Game::addPlayer(std::string name) {
 }
 
 void Game::firstDeal() {
-    for (Player player : players) {
+    for (Player& player : players) {
         Card firstCard = deck.dealCard();
         player.receiveDeal(firstCard);
         Card secondCard = deck.dealCard();

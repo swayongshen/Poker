@@ -10,7 +10,14 @@ int main() {
 
     game.firstDeal();
 
+
+
     game.test();
+
+    /**
+     * TODO:
+     * Player's state because deal cards doesn't seem to work in game.test();
+     */
     
 
 }
