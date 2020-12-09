@@ -8,8 +8,8 @@
 class Game {
     std::vector<Player> players;
     Deck deck;
-    std::vector<Card> river;
-    
+    std::vector<Card> table;
+    std::vector<Card> loadHandAndTable(Player player);
     /**
      * Returns highest rank if player has flush and -1 if there is no flush.
      */
