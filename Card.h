@@ -3,7 +3,7 @@
 
 #include <string>
 
-enum Suit {Club = 0, Diamond = 1, Heart = 2, Spade = 3};
+enum Suit {unknown = -1, Club = 0, Diamond = 1, Heart = 2, Spade = 3};
 
 std::string suitToName(Suit suit);
 

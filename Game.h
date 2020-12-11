@@ -1,5 +1,9 @@
+#ifndef GAME_H
+#define GAME_H
+
 #include <vector>
 #include <string>
+#include <utility>
 
 #include "Deck.h"
 #include "Card.h"
@@ -11,15 +15,19 @@ class Game {
     std::vector<Card> table;
     std::vector<Card> loadHandAndTable(Player player);
     /**
-     * Returns highest rank if player has flush and -1 if there is no flush.
+     * The functions below will return the suit and rank of the highest card that fufils the criteria
+     * i.e if a flush is 3, 4, 7, 9, 10 spades, hasFlush will return 10.
+     * If criteria is not fufilled, return 0.
      */
-    int hasFlush(Player player);
-    int hasStraight(Player player);
-    int hasStraightFlush(Player player);
-    int hasRoyalFlush(Player player);
-    int hasPair(Player player);
-    int hasThreeKind(Player player);
-    int hasTwoPair(Player player);
+    std::pair<Suit, int> hasFlush(Player player);
+    int hasNConsecutive(std::vector<int> cardRanks, int n);
+    std::pair<Suit, int> hasStraight(Player player);
+    std::pair<Suit, int> hasStraightFlush(Player player);
+    //std::pair<Suit, int> hasRoyalFlush(Player player);
+    std::pair<Suit, int> hasPair(Player player);
+    std::pair<Suit, int> hasThreeKind(Player player);
+    std::pair<Suit, int> hasFourKind(Player player);
+    std::pair<Suit, int> hasTwoPair(Player player);
 
     
     /**
@@ -33,3 +41,5 @@ class Game {
         void firstDeal();
         void test();
 };
+
+#endif

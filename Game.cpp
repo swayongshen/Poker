@@ -12,16 +12,22 @@ std::vector<Card> Game::loadHandAndTable(Player player) {
     std::vector<Card> loaded;
     for (Card card : table) {
         loaded.push_back(card);
+        if(card.getRank() == 1) {
+            loaded.push_back(Card(card.getSuit(), 14));
+        }
     }
     for (Card card : player.getHand()) {
         loaded.push_back(card);
+        if (card.getRank() == 1) {
+            loaded.push_back(Card(card.getSuit(), 14));
+        }
     }
     return loaded;
 }
 
-int Game::hasFlush(Player player) {
+std::pair<Suit, int> Game::hasFlush(Player player) {
     if (table.size() >= 3) {
-        std::unordered_map<int, int> countSuits = {{0, 0}, {1, 0}, {2,0}, {3,0}};
+        std::unordered_map<Suit, int> countSuits = {{Club, 0}, {Diamond, 0}, {Heart,0}, {Spade,0}};
         std::vector<Card> cards;
         for (Card card : table) {
             countSuits[card.getSuit()] += 1;
@@ -38,42 +44,28 @@ int Game::hasFlush(Player player) {
                 int suit = pair.first;
                 std::copy_if(cards.begin(), cards.end(), std::back_inserter(cardsOfSuit), [suit](Card card) -> bool {return card.getSuit() == suit;});
                 //If Ace exists, return ace, else, return max
-                if (std::count_if(cardsOfSuit.begin(), cardsOfSuit.end(), [](Card card) {return card.getRank() == 1; std::cout << "reach2";}) == 1) {
-                    return 1;
+                if (std::count_if(cardsOfSuit.begin(), cardsOfSuit.end(), [](Card card) {return card.getRank() == 1;}) == 1) {
+                    return std::make_pair(pair.first, 14);
                 } else {
                     Card maxCard = *std::max_element(cards.begin(), cards.end(), [](Card cardA, Card cardB) {return cardA.getRank() < cardB.getRank();});
-                    return maxCard.getRank();
+                    return std::make_pair(pair.first, maxCard.getRank());
                 }
-
             }
         }
         //None of the suits have 5 cards
-        return -1;
+        return std::make_pair(unknown, -1);
     } else {
-        return -1;
+        return std::make_pair(unknown, -1);
     }
 }
-
-int Game::hasStraight(Player player) {
-    //Put all numbers into a vector and sort and check for 5 consecutive.
-    std::vector<Card> loaded = loadHandAndTable(player);
-    std::vector<int> loadedInt;
-    std::for_each(loaded.begin(), loaded.end(), [&loadedInt](Card card) {
-        int rank = card.getRank();
-        loadedInt.push_back(rank);
-        if (rank == 1) {
-            //Ace is represented as both 14 and 1 for straight
-            loadedInt.push_back(14);
-        }
-    });
-
-    //Algorithm to find if any 5 consecutively ranked cards
+int Game::hasNConsecutive(std::vector<int> cardRanks, int n) {
     std::unordered_set<int> num_set;
-    for (int num : loadedInt) {
+    for (int num : cardRanks) {
         num_set.insert(num);
     }
 
     int longestStreak = 0;
+    int currMaxNum = -1;
 
     for (int num : num_set) {
         if (num_set.find(num-1) == num_set.end()) {
@@ -85,30 +77,90 @@ int Game::hasStraight(Player player) {
                 currentStreak += 1;
             }
 
-            if (currentStreak == 5) {
-                return currentNum;
+            if (currentStreak >= n && currentNum > currMaxNum) {
+                currMaxNum = currentNum;
             }
         }
     }
-    return -1;
+    return currMaxNum;
+}
+
+std::pair<Suit, int> Game::hasStraight(Player player) {
+    //Put all numbers into a vector and sort and check for 5 consecutive.
+    std::vector<Card> loaded = loadHandAndTable(player);
+    std::vector<int> loadedInt;
+    std::for_each(loaded.begin(), loaded.end(), [&loadedInt](Card card) {
+        int rank = card.getRank();
+        loadedInt.push_back(rank);
+    });
+
+    //Algorithm to find if any 5 consecutively ranked cards
+    return std::make_pair(unknown, hasNConsecutive(loadedInt, 5));
 
 };
 
+/*
+* For each card that has the same rank as the straight high card,
+* check if there is 5 of the suit of that card.
+*/ 
+std::pair<Suit, int> Game::hasStraightFlush(Player player) {
+    std::vector<Card> cards = loadHandAndTable(player);
+    //Check if each card in the straight is all part of same suit.
+    Suit suit = hasFlush(player).first;
+    if (suit != unknown) {
+        std::vector<int> suited;
+        std::for_each(cards.begin(), cards.end(), [suit, &suited] (Card card) {
+            if (card.getSuit() == suit) {
+                suited.push_back(card.getRank());
+            };
+        });
+        int hasFiveInSuit = hasNConsecutive(suited, 5);
+        if (hasFiveInSuit != -1) {
+            return std::make_pair(static_cast<Suit>(suit), hasFiveInSuit);
+        }
+    }
+    //None of the suits had a flush
+    return std::make_pair(unknown, -1);
+}
+
+std::pair<Suit, int> Game::hasPair(Player player) {
+    std::vector<Card> cards = loadHandAndTable(player);
+    std::unordered_map<int, int> countRank;
+    for (Card card : cards) {
+        countRank[card.getRank()] += 1;
+    }
+    int currHighestPair = -1;
+    for (auto& pair : countRank) {
+        if (pair.second >= 2) {
+            currHighestPair = std::max(currHighestPair, pair.first);
+        }
+    }
+    return std::make_pair(unknown, currHighestPair);
+
+}
+
 void Game::test() {
 
-    for (int i = 0; i < 5; i++) {
-        table.push_back(deck.dealCard());
-        std::cout << table[i] << std::endl;
-    }
-
-    for (Card& card : players[0].getHand()) {
-        std::cout << card << std::endl;
-    }
-
-    std::cout << hasFlush(players[0]) << std::endl;
-    std::cout << hasStraight(players[0]) << std::endl;
+    table.push_back(Card(Spade, 1));
+    table.push_back(Card(Spade, 13));
+    table.push_back(Card(Spade, 12));
+    table.push_back(Card(Spade, 11));
+    table.push_back(Card(Spade, 10));
+    players[0].getHand().pop_back();
+    players[0].getHand().pop_back();
+    players[0].getHand().push_back(Card(Diamond, 10));
+    players[0].getHand().push_back(Card(Club, 9));
 
 
+    std::vector<Card> cards = loadHandAndTable(players[0]);
+    std::for_each(cards.begin(), cards.end(), [](Card card) {std::cout << card << std::endl;});
+
+    std::pair<Suit, int> hasStraightL = hasStraight(players[0]);
+    std::pair<Suit, int> hasStraightFlushL = hasStraightFlush(players[0]);
+    std::pair<Suit, int> hasPairL = hasPair(players[0]);
+    std::cout << hasStraightL.first << " "  << hasStraightL.second << std::endl;
+    std::cout << hasStraightFlushL.first << " " << hasStraightFlushL.second<< std::endl;
+    std::cout << hasPairL.first << " " << hasPairL.second<< std::endl;
 }
 
 
