@@ -123,20 +123,43 @@ std::pair<Suit, int> Game::hasStraightFlush(Player player) {
     return std::make_pair(unknown, -1);
 }
 
-std::pair<Suit, int> Game::hasPair(Player player) {
+std::vector<int> Game::hasPairTripsQuads(Player player) {
     std::vector<Card> cards = loadHandAndTable(player);
     std::unordered_map<int, int> countRank;
     for (Card card : cards) {
         countRank[card.getRank()] += 1;
     }
-    int currHighestPair = -1;
+    std::vector<int> currHighest = {-1, -1, -1};
     for (auto& pair : countRank) {
-        if (pair.second >= 2) {
-            currHighestPair = std::max(currHighestPair, pair.first);
+        for (int i = 2; i <= 4; i++) {
+            if (pair.second >= i) {
+                currHighest[i - 2] = std::max(currHighest[i - 2], pair.first);
+            }
         }
     }
-    return std::make_pair(unknown, currHighestPair);
+    return currHighest;
+}
 
+std::vector<int> Game::hasTwoPair(Player player) {
+    std::vector<Card> cards = loadHandAndTable(player);
+    std::unordered_map<int, int> countRank;
+    for (Card card : cards) {
+        countRank[card.getRank()] += 1;
+    }
+    int currHighest = -1;
+    int currSecondHighest = -1;
+
+    for (auto& pair : countRank) {
+        if (pair.second >= 2 && pair.first >= currSecondHighest) {
+            if (pair.first > currHighest) {
+                currSecondHighest = currHighest;
+                currHighest = pair.first;
+            } else {
+                currSecondHighest = pair.first;
+            }
+        }
+    }
+    return {currHighest, currSecondHighest};
 }
 
 void Game::test() {
@@ -144,12 +167,12 @@ void Game::test() {
     table.push_back(Card(Spade, 1));
     table.push_back(Card(Spade, 13));
     table.push_back(Card(Spade, 12));
-    table.push_back(Card(Spade, 11));
+    table.push_back(Card(Heart, 10));
     table.push_back(Card(Spade, 10));
     players[0].getHand().pop_back();
     players[0].getHand().pop_back();
     players[0].getHand().push_back(Card(Diamond, 10));
-    players[0].getHand().push_back(Card(Club, 9));
+    players[0].getHand().push_back(Card(Club, 13));
 
 
     std::vector<Card> cards = loadHandAndTable(players[0]);
@@ -157,10 +180,13 @@ void Game::test() {
 
     std::pair<Suit, int> hasStraightL = hasStraight(players[0]);
     std::pair<Suit, int> hasStraightFlushL = hasStraightFlush(players[0]);
-    std::pair<Suit, int> hasPairL = hasPair(players[0]);
+    int hasPairL = hasPairTripsQuads(players[0])[0];
     std::cout << hasStraightL.first << " "  << hasStraightL.second << std::endl;
     std::cout << hasStraightFlushL.first << " " << hasStraightFlushL.second<< std::endl;
-    std::cout << hasPairL.first << " " << hasPairL.second<< std::endl;
+    std::cout << hasPairL << std::endl;
+    std::cout << hasPairTripsQuads(players[0])[1] << std::endl;
+    std::cout << hasPairTripsQuads(players[0])[2] << std::endl;
+    std::cout << hasTwoPair(players[0])[0] << " " << hasTwoPair(players[0])[1] << std::endl;
 }
 
 

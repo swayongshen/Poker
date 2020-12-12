@@ -24,10 +24,14 @@ class Game {
     std::pair<Suit, int> hasStraight(Player player);
     std::pair<Suit, int> hasStraightFlush(Player player);
     //std::pair<Suit, int> hasRoyalFlush(Player player);
-    std::pair<Suit, int> hasPair(Player player);
-    std::pair<Suit, int> hasThreeKind(Player player);
-    std::pair<Suit, int> hasFourKind(Player player);
-    std::pair<Suit, int> hasTwoPair(Player player);
+
+    /**
+     * Returns a vector {a, b, c} where a represents the highest pair,
+     * b represents the highest three of a kind and c represents the highest quad.
+     * If they have value of -1 it means none e.g. -1 for a means no pair found.
+     */
+    std::vector<int> hasPairTripsQuads(Player player);
+    std::vector<int> hasTwoPair(Player player);
 
     
     /**
