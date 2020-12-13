@@ -38,11 +38,22 @@ class Game {
     //There are 10 types of poker hands, get the type
     int handType(Player player);
 
+    static compareInt(int A, int B) {
+        if (A < B) {
+            return -1;
+        } else if (A > B) {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+    
     /**
      * Returns 0 if equal hands, 1 if playerA's hand is better than playerB's hand
      * and -1 if playerA's hand is worse than playerB's hand.
      */
     int compareHands(Player playerA, Player playerB);
+
     public:
         Game();
         void addPlayer(std::string name);

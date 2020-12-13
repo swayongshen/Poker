@@ -3,6 +3,7 @@
 #include <unordered_set>
 #include <algorithm>
 #include <iostream>
+#include <boost/function.hpp>
 
 #include "Game.h"
 #include "Card.h"
@@ -240,6 +241,48 @@ int Game::handType(Player player) {
         return 2;
     } else {
         return 1;
+    }
+}
+
+static compareInt(int A, int B) {
+    if (A < B) {
+        return -1;
+    } else if (A > B) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+int Game::compareHands(Player playerA, Player playerB) {
+    int AType = handType(playerA);
+    int BType = handType(playerB);
+
+    if (AType > BType) {
+        return 1;
+    } else if (AType < BType) {
+        return -1;
+    } else {
+        switch (AType) {
+            case 1:
+                return compareInt(getHighCard(playerA), getHighCard(playerB));
+            case 2:
+                return compareInt(hasPairTripsQuads(playerA)[0], hasPairTripsQuads(playerB)[0]);
+            case 3:
+                return compareInt(hasTwoPair(playerA)[0], hasTwoPair(playerB)[0]);
+            case 4:
+                return compareInt(hasPairTripsQuads(playerA)[1], hasPairTripsQuads(playerB)[1]);
+            case 5:
+                return compareInt(hasStraight(playerA).second, hasStraight(playerB).second);
+            case 6:
+                return compareInt(hasFlush(playerA).second, hasFlush(playerB).second);
+            case 7:
+                return compareInt(hasFullHouse(playerA).second, hasFullHouse(playerB).second);
+            case 8:
+                return compareInt(hasPairTripsQuads(playerA)[2], hasPairTripsQuads(playerB)[2]);
+            case 9 || 10:
+                return compareInt(hasStraightFlush(playerA).second, hasStraightFlush(playerB.second));
+        }
     }
 }
 
