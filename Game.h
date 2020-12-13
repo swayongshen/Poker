@@ -31,14 +31,18 @@ class Game {
      * If they have value of -1 it means none e.g. -1 for a means no pair found.
      */
     std::vector<int> hasPairTripsQuads(Player player);
+    std::pair<Suit, int> hasFullHouse(Player player);
     std::vector<int> hasTwoPair(Player player);
+    int getHighCard(Player player);
 
-    
+    //There are 10 types of poker hands, get the type
+    int handType(Player player);
+
     /**
      * Returns 0 if equal hands, 1 if playerA's hand is better than playerB's hand
      * and -1 if playerA's hand is worse than playerB's hand.
      */
-    static int compareHands(Player playerA, Player playerB);
+    int compareHands(Player playerA, Player playerB);
     public:
         Game();
         void addPlayer(std::string name);

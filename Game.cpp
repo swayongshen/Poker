@@ -140,6 +140,33 @@ std::vector<int> Game::hasPairTripsQuads(Player player) {
     return currHighest;
 }
 
+std::pair<Suit, int> Game::hasFullHouse(Player player) {
+    std::vector<Card> cards = loadHandAndTable(player);
+    std::unordered_map<int, int> countRank;
+    for (Card card : cards) {
+        countRank[card.getRank()] += 1;
+    }
+    //Find highest triple and highest pair
+    int highestTriple = -1;
+    int highestPair = -1;
+
+    for (auto& pair : countRank) {
+        if (pair.second >= 3 && pair.first > highestTriple) {
+            highestTriple = pair.first;
+        }
+        if (pair.second >= 2 && pair.second > highestPair && pair.first != highestTriple) {
+            highestPair = pair.first;
+        }
+    }
+
+    if (highestTriple != -1 && highestPair != -1) {
+        return std::make_pair(unknown, highestTriple);
+    }
+
+    return std::make_pair(unknown, -1);
+
+}
+
 std::vector<int> Game::hasTwoPair(Player player) {
     std::vector<Card> cards = loadHandAndTable(player);
     std::unordered_map<int, int> countRank;
@@ -162,11 +189,66 @@ std::vector<int> Game::hasTwoPair(Player player) {
     return {currHighest, currSecondHighest};
 }
 
+int Game::getHighCard(Player player) {
+    std::vector<Card> cards = loadHandAndTable(player);
+    int highCard = cards[0].getRank();
+    for (Card card : cards) {
+        highCard = std::max(highCard, card.getRank());
+    }
+    return highCard;
+}
+
+
+int Game::handType(Player player) {
+    std::pair<Suit, int> playerHasStraightFlush = hasStraightFlush(player);
+    //Royal flush/straight flush
+    if (playerHasStraightFlush.second != -1) {
+        //If rank of highest card is Ace it is royal flush
+        return playerHasStraightFlush.second == 14 ? 10 : 9;
+    }
+    std::vector<int> playerHasPairTripsQuads = hasPairTripsQuads(player);
+    //Quads
+    if (playerHasPairTripsQuads[2] != -1) {
+        return 8;
+    }
+    //Full house
+    std::pair<Suit, int> playerHasFullHouse = hasFullHouse(player);
+    if (playerHasFullHouse.second != -1) {
+        return 7;
+    }
+    //Flush
+    std::pair<Suit, int> playerHasFlush = hasFlush(player);
+    if (playerHasFlush.second != -1) {
+        return 6;
+    }
+    //Straight
+    std::pair<Suit, int> playerHasStraight = hasStraight(player);
+    if (playerHasStraight.second != -1) {
+        return 5;
+    }
+    //Three of a kind
+    if (playerHasPairTripsQuads[1] != -1) {
+        return 4;
+    }
+    //Two pair
+    std::vector<int> playerHasTwoPair = hasTwoPair(player);
+    if (playerHasTwoPair[0] != -1 && playerHasTwoPair[1] != -1) {
+        return 3;
+    }
+    //Pair
+    if (playerHasPairTripsQuads[0] != -1) {
+        return 2;
+    } else {
+        return 1;
+    }
+}
+
+
 void Game::test() {
 
     table.push_back(Card(Spade, 1));
     table.push_back(Card(Spade, 13));
-    table.push_back(Card(Spade, 12));
+    table.push_back(Card(Club, 10));
     table.push_back(Card(Heart, 10));
     table.push_back(Card(Spade, 10));
     players[0].getHand().pop_back();
@@ -181,12 +263,15 @@ void Game::test() {
     std::pair<Suit, int> hasStraightL = hasStraight(players[0]);
     std::pair<Suit, int> hasStraightFlushL = hasStraightFlush(players[0]);
     int hasPairL = hasPairTripsQuads(players[0])[0];
+    std::pair<Suit, int> hasFullHouseL = hasFullHouse(players[0]);
     std::cout << hasStraightL.first << " "  << hasStraightL.second << std::endl;
     std::cout << hasStraightFlushL.first << " " << hasStraightFlushL.second<< std::endl;
     std::cout << hasPairL << std::endl;
     std::cout << hasPairTripsQuads(players[0])[1] << std::endl;
     std::cout << hasPairTripsQuads(players[0])[2] << std::endl;
     std::cout << hasTwoPair(players[0])[0] << " " << hasTwoPair(players[0])[1] << std::endl;
+    std::cout << hasFullHouseL.second << std::endl;
+    std::cout << handType(players[0]) << std::endl;
 }
 
 
