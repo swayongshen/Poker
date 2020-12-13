@@ -3,7 +3,6 @@
 #include <unordered_set>
 #include <algorithm>
 #include <iostream>
-#include <boost/function.hpp>
 
 #include "Game.h"
 #include "Card.h"
@@ -244,7 +243,7 @@ int Game::handType(Player player) {
     }
 }
 
-static compareInt(int A, int B) {
+static int compareInt(int A, int B) {
     if (A < B) {
         return -1;
     } else if (A > B) {
@@ -280,9 +279,13 @@ int Game::compareHands(Player playerA, Player playerB) {
                 return compareInt(hasFullHouse(playerA).second, hasFullHouse(playerB).second);
             case 8:
                 return compareInt(hasPairTripsQuads(playerA)[2], hasPairTripsQuads(playerB)[2]);
-            case 9 || 10:
-                return compareInt(hasStraightFlush(playerA).second, hasStraightFlush(playerB.second));
+            //Fall through, same behaviour as case 10
+            case 9:
+            case 10:
+                return compareInt(hasStraightFlush(playerA).second, hasStraightFlush(playerB).second);
         }
+        //Won't reach here
+        return 0;
     }
 }
 
