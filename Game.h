@@ -20,8 +20,11 @@ class Game {
      * If criteria is not fufilled, return 0.
      */
     std::pair<Suit, int> hasFlush(Player player);
+
     int hasNConsecutive(std::vector<int> cardRanks, int n);
+
     std::pair<Suit, int> hasStraight(Player player);
+
     std::pair<Suit, int> hasStraightFlush(Player player);
     //std::pair<Suit, int> hasRoyalFlush(Player player);
 
@@ -31,22 +34,24 @@ class Game {
      * If they have value of -1 it means none e.g. -1 for a means no pair found.
      */
     std::vector<int> hasPairTripsQuads(Player player);
-    std::pair<Suit, int> hasFullHouse(Player player);
+
+    std::vector<int> hasFullHouse(Player player);
+
+    /**
+     * Returns {Highest pair, second highest pair} if any.
+     */
     std::vector<int> hasTwoPair(Player player);
+
     int getHighCard(Player player);
 
-    //There are 10 types of poker hands, get the type
-    int handType(Player player);
+    /**
+     * There are 10 types of poker hands. Returns XYY where X is the prefix which represents the type of hand
+     * e.g. 10 for royal flush, 1 for high card. YY is the value associated. E.g. 14 for Ace. 
+     * A royal flush would return 1014 and a straight flush with 10 as the highest card will return 910.
+     */
+    int handRank(Player player);
 
-    static int compareInt(int A, int B) {
-        if (A < B) {
-            return -1;
-        } else if (A > B) {
-            return 1;
-        } else {
-            return 0;
-        }
-    }
+    static int compareInt(int A, int B);
 
     /**
      * Returns 0 if equal hands, 1 if playerA's hand is better than playerB's hand

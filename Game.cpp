@@ -25,7 +25,7 @@ std::vector<Card> Game::loadHandAndTable(Player player) {
     return loaded;
 }
 
-std::pair<Suit, int> Game::hasFlush(Player player) {
+std::vector<int> Game::hasFlush(Player player) {
     if (table.size() >= 3) {
         std::unordered_map<Suit, int> countSuits = {{Club, 0}, {Diamond, 0}, {Heart,0}, {Spade,0}};
         std::vector<Card> cards;
@@ -40,24 +40,24 @@ std::pair<Suit, int> Game::hasFlush(Player player) {
         for (auto const& pair : countSuits) {
             //For the suit that has more than or equal to 5 cards
             if (pair.second >= 5) {
-                std::vector<Card> cardsOfSuit;
+                std::vector<int> cardsOfSuit;
                 int suit = pair.first;
-                std::copy_if(cards.begin(), cards.end(), std::back_inserter(cardsOfSuit), [suit](Card card) -> bool {return card.getSuit() == suit;});
-                //If Ace exists, return ace, else, return max
-                if (std::count_if(cardsOfSuit.begin(), cardsOfSuit.end(), [](Card card) {return card.getRank() == 1;}) == 1) {
-                    return std::make_pair(pair.first, 14);
-                } else {
-                    Card maxCard = *std::max_element(cards.begin(), cards.end(), [](Card cardA, Card cardB) {return cardA.getRank() < cardB.getRank();});
-                    return std::make_pair(pair.first, maxCard.getRank());
-                }
+                std::for_each(cards.begin(), cards.end(), [suit, &cardsOfSuit](Card card) -> bool {
+                    if (card.getSuit() == suit) {
+                        cardsOfSuit.push_back(card.getRank());
+                    }
+                });
+                std::sort(cardOfSuit.begin(), cardsOfSuit.end());
+                return cardsOfSuit;
             }
         }
         //None of the suits have 5 cards
-        return std::make_pair(unknown, -1);
+        return {-1};
     } else {
-        return std::make_pair(unknown, -1);
+        return {-1};
     }
 }
+
 int Game::hasNConsecutive(std::vector<int> cardRanks, int n) {
     std::unordered_set<int> num_set;
     for (int num : cardRanks) {
@@ -85,7 +85,7 @@ int Game::hasNConsecutive(std::vector<int> cardRanks, int n) {
     return currMaxNum;
 }
 
-std::pair<Suit, int> Game::hasStraight(Player player) {
+int Game::hasStraight(Player player) {
     //Put all numbers into a vector and sort and check for 5 consecutive.
     std::vector<Card> loaded = loadHandAndTable(player);
     std::vector<int> loadedInt;
@@ -95,7 +95,7 @@ std::pair<Suit, int> Game::hasStraight(Player player) {
     });
 
     //Algorithm to find if any 5 consecutively ranked cards
-    return std::make_pair(unknown, hasNConsecutive(loadedInt, 5));
+    return hasNConsecutive(loadedInt, 5);
 
 };
 
@@ -103,24 +103,14 @@ std::pair<Suit, int> Game::hasStraight(Player player) {
 * For each card that has the same rank as the straight high card,
 * check if there is 5 of the suit of that card.
 */ 
-std::pair<Suit, int> Game::hasStraightFlush(Player player) {
-    std::vector<Card> cards = loadHandAndTable(player);
+int Game::hasStraightFlush(Player player) {
     //Check if each card in the straight is all part of same suit.
-    Suit suit = hasFlush(player).first;
-    if (suit != unknown) {
-        std::vector<int> suited;
-        std::for_each(cards.begin(), cards.end(), [suit, &suited] (Card card) {
-            if (card.getSuit() == suit) {
-                suited.push_back(card.getRank());
-            };
-        });
-        int hasFiveInSuit = hasNConsecutive(suited, 5);
-        if (hasFiveInSuit != -1) {
-            return std::make_pair(static_cast<Suit>(suit), hasFiveInSuit);
-        }
+    std::vector<int> playerHasFlush = hasFlush(player);
+    if (playerHasFlush[0] != -1) {
+        return hasNConsecutive(playerHasFlush, 5);
     }
     //None of the suits had a flush
-    return std::make_pair(unknown, -1);
+    return -1;
 }
 
 std::vector<int> Game::hasPairTripsQuads(Player player) {
@@ -140,7 +130,7 @@ std::vector<int> Game::hasPairTripsQuads(Player player) {
     return currHighest;
 }
 
-std::pair<Suit, int> Game::hasFullHouse(Player player) {
+std::vector<int> Game::hasFullHouse(Player player) {
     std::vector<Card> cards = loadHandAndTable(player);
     std::unordered_map<int, int> countRank;
     for (Card card : cards) {
@@ -160,10 +150,10 @@ std::pair<Suit, int> Game::hasFullHouse(Player player) {
     }
 
     if (highestTriple != -1 && highestPair != -1) {
-        return std::make_pair(unknown, highestTriple);
+        return {highestTriple, highestPair};
     }
 
-    return std::make_pair(unknown, -1);
+    return {-1, -1};
 
 }
 
@@ -199,47 +189,58 @@ int Game::getHighCard(Player player) {
 }
 
 
-int Game::handType(Player player) {
+int Game::handRank(Player player) {
     std::pair<Suit, int> playerHasStraightFlush = hasStraightFlush(player);
     //Royal flush/straight flush
     if (playerHasStraightFlush.second != -1) {
         //If rank of highest card is Ace it is royal flush
-        return playerHasStraightFlush.second == 14 ? 10 : 9;
+        return playerHasStraightFlush.second == 14 ? 1000 + playerHasStraightFlush.first : 900 + playerHasStraightFlush.first;
     }
+    
+    //Four of a kind/Quads
     std::vector<int> playerHasPairTripsQuads = hasPairTripsQuads(player);
-    //Quads
     if (playerHasPairTripsQuads[2] != -1) {
-        return 8;
+        return 800 + playerHasPairTripsQuads[2];
     }
+
     //Full house
-    std::pair<Suit, int> playerHasFullHouse = hasFullHouse(player);
+    std::vector<int> playerHasFullHouse = hasFullHouse(player);
     if (playerHasFullHouse.second != -1) {
-        return 7;
+        return 700 + playerHasFullHouse[0];
     }
+
     //Flush
-    std::pair<Suit, int> playerHasFlush = hasFlush(player);
-    if (playerHasFlush.second != -1) {
-        return 6;
+    std::vector<int> playerHasFlush = hasFlush(player);
+    if (playerHasFlush[0] != -1) {
+        sum_of_ranks = 0;
+        for (int n : plyaerHasFlush) sum_of_ranks += n;
+        return 600 + sum_of_ranks;
     }
+
     //Straight
-    std::pair<Suit, int> playerHasStraight = hasStraight(player);
-    if (playerHasStraight.second != -1) {
-        return 5;
+    int playerHasStraight = hasStraight(player);
+    if (playerHasStraight != -1) {
+        return 500 + playerHasStraight;
     }
+
     //Three of a kind
     if (playerHasPairTripsQuads[1] != -1) {
-        return 4;
+        return 400 + playerHasPairTripsQuads[1];
     }
+
     //Two pair
     std::vector<int> playerHasTwoPair = hasTwoPair(player);
     if (playerHasTwoPair[0] != -1 && playerHasTwoPair[1] != -1) {
-        return 3;
+        return 300 + playerHasTwoPair[0];
     }
+
     //Pair
     if (playerHasPairTripsQuads[0] != -1) {
-        return 2;
+        return 200 + playerHasPairTripsQuads[0];
+    
+    //High card
     } else {
-        return 1;
+        return 100 + getHighCard(player);
     }
 }
 
@@ -253,6 +254,8 @@ static int compareInt(int A, int B) {
     }
 }
 
+
+
 int Game::compareHands(Player playerA, Player playerB) {
     int AType = handType(playerA);
     int BType = handType(playerB);
@@ -262,30 +265,55 @@ int Game::compareHands(Player playerA, Player playerB) {
     } else if (AType < BType) {
         return -1;
     } else {
-        switch (AType) {
-            case 1:
-                return compareInt(getHighCard(playerA), getHighCard(playerB));
-            case 2:
-                return compareInt(hasPairTripsQuads(playerA)[0], hasPairTripsQuads(playerB)[0]);
-            case 3:
-                return compareInt(hasTwoPair(playerA)[0], hasTwoPair(playerB)[0]);
-            case 4:
-                return compareInt(hasPairTripsQuads(playerA)[1], hasPairTripsQuads(playerB)[1]);
-            case 5:
-                return compareInt(hasStraight(playerA).second, hasStraight(playerB).second);
-            case 6:
-                return compareInt(hasFlush(playerA).second, hasFlush(playerB).second);
-            case 7:
-                return compareInt(hasFullHouse(playerA).second, hasFullHouse(playerB).second);
-            case 8:
-                return compareInt(hasPairTripsQuads(playerA)[2], hasPairTripsQuads(playerB)[2]);
-            //Fall through, same behaviour as case 10
-            case 9:
-            case 10:
-                return compareInt(hasStraightFlush(playerA).second, hasStraightFlush(playerB).second);
+        int compareKickers(std::vector<int> cardsToRemove, int limitOfKickers) {
+            std::vector<Card> playerACards = loadHandAndTable(playerA);
+            std::vector<int> playerACardsLeftover;
+            std::for_each(playerACards.begin(), playerACards.end(), [&playerACardsLeftover, &cardsToRemove] (Card card) {if (cardsToRemove.find(card.getRank()) != cardsToRemove.end()) playerACardsLeftover.push_back(card.getRank();)};
+            std::vector<Card> playerBCards = loadHandAndTable(playerB);
+            std::vector<int> playerBCardsLeftover;
+            std::for_each(playerBCards.begin(), playerBCards.end(), [&playerBCardsLeftover, &cardsToRemove] (Card card) {if (cardsToRemove.find(card.getRank()) != cardsToRemove.end()) playerBCardsLeftover.push_back(card.getRank();)};
+            for (int i = 0; i < playerACardsLeftOver.size() && i < playerBCardsLeftover.size() && i < limitOfKickers; i++) {
+                if (compareInt(playerACardsLeftOver[i], playerBCardsLeftOver[i]) != 0) {
+                    return compareInt(playerACardsLeftOver[i], playerBCardsLeftOver[i]);
+                }
+            }
+            return 0;
         }
-        //Won't reach here
+
+        //Full house with same triple, compare the pair.
+        if (Atype > 700 && Atype < 800) {
+            return compareInt(hasFullHouse(playerA)[1], hasFullHouse(playerB)[1]);
+        }
+        //Three of a kind: Check up to 2 kickers.
+        if (AType > 400 && AType < 500) {
+            int tripleRank = AType % 100;
+            return compareKickers({tripleRank}, 2);
+        }
+
+        //Two pair check second pair, then check 1 kicker.
+        if (AType > 300 && AType < 400) {
+            int playerASecondPair = hasTwoPair(playerA)[1];
+            int playerBSecondPair = hasTwoPair(playerB)[1];
+            if (compareInt(playerASecondPair, playerBSecondPair) == 0) {
+                return compareKickers({AType % 100, playerASecondPair}, 1);
+            } else {
+                return compareInt(playerASecondPair, playerBSecondPair);
+            }
+        }
+
+        //Pair check up to 3 kickers.
+        if (AType > 200 && AType < 300) {
+            return compareKickers({AType % 100}, 3);
+        }
+
+        //High card check up to 4 kickers.
+        if (AType > 100 && AType < 200) {
+            return compareKickers({AType % 100}, 4);
+        }
+
+        //Doesn't reach here
         return 0;
+
     }
 }
 
@@ -303,21 +331,6 @@ void Game::test() {
     players[0].getHand().push_back(Card(Club, 13));
 
 
-    std::vector<Card> cards = loadHandAndTable(players[0]);
-    std::for_each(cards.begin(), cards.end(), [](Card card) {std::cout << card << std::endl;});
-
-    std::pair<Suit, int> hasStraightL = hasStraight(players[0]);
-    std::pair<Suit, int> hasStraightFlushL = hasStraightFlush(players[0]);
-    int hasPairL = hasPairTripsQuads(players[0])[0];
-    std::pair<Suit, int> hasFullHouseL = hasFullHouse(players[0]);
-    std::cout << hasStraightL.first << " "  << hasStraightL.second << std::endl;
-    std::cout << hasStraightFlushL.first << " " << hasStraightFlushL.second<< std::endl;
-    std::cout << hasPairL << std::endl;
-    std::cout << hasPairTripsQuads(players[0])[1] << std::endl;
-    std::cout << hasPairTripsQuads(players[0])[2] << std::endl;
-    std::cout << hasTwoPair(players[0])[0] << " " << hasTwoPair(players[0])[1] << std::endl;
-    std::cout << hasFullHouseL.second << std::endl;
-    std::cout << handType(players[0]) << std::endl;
 }
 
 
