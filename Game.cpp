@@ -42,12 +42,12 @@ std::vector<int> Game::hasFlush(Player player) {
             if (pair.second >= 5) {
                 std::vector<int> cardsOfSuit;
                 int suit = pair.first;
-                std::for_each(cards.begin(), cards.end(), [suit, &cardsOfSuit](Card card) -> bool {
+                std::for_each(cards.begin(), cards.end(), [suit, &cardsOfSuit](Card card) {
                     if (card.getSuit() == suit) {
                         cardsOfSuit.push_back(card.getRank());
                     }
                 });
-                std::sort(cardOfSuit.begin(), cardsOfSuit.end());
+                std::sort(cardsOfSuit.begin(), cardsOfSuit.end());
                 return cardsOfSuit;
             }
         }
@@ -190,11 +190,11 @@ int Game::getHighCard(Player player) {
 
 
 int Game::handRank(Player player) {
-    std::pair<Suit, int> playerHasStraightFlush = hasStraightFlush(player);
+    int playerHasStraightFlush = hasStraightFlush(player);
     //Royal flush/straight flush
-    if (playerHasStraightFlush.second != -1) {
+    if (playerHasStraightFlush != -1) {
         //If rank of highest card is Ace it is royal flush
-        return playerHasStraightFlush.second == 14 ? 1000 + playerHasStraightFlush.first : 900 + playerHasStraightFlush.first;
+        return playerHasStraightFlush == 14 ? 1000 + playerHasStraightFlush : 900 + playerHasStraightFlush;
     }
     
     //Four of a kind/Quads
@@ -205,15 +205,15 @@ int Game::handRank(Player player) {
 
     //Full house
     std::vector<int> playerHasFullHouse = hasFullHouse(player);
-    if (playerHasFullHouse.second != -1) {
+    if (playerHasFullHouse[0] != -1) {
         return 700 + playerHasFullHouse[0];
     }
 
     //Flush
     std::vector<int> playerHasFlush = hasFlush(player);
     if (playerHasFlush[0] != -1) {
-        sum_of_ranks = 0;
-        for (int n : plyaerHasFlush) sum_of_ranks += n;
+        int sum_of_ranks = 0;
+        for (int n : playerHasFlush) sum_of_ranks += n;
         return 600 + sum_of_ranks;
     }
 
@@ -244,7 +244,7 @@ int Game::handRank(Player player) {
     }
 }
 
-static int compareInt(int A, int B) {
+int Game::compareInt(int A, int B) {
     if (A < B) {
         return -1;
     } else if (A > B) {
@@ -254,40 +254,42 @@ static int compareInt(int A, int B) {
     }
 }
 
-
+int Game::compareKickers(std::vector<int> cardsToRemove, int limitOfKickers, Player playerA, Player playerB) {
+    std::vector<Card> playerACards = loadHandAndTable(playerA);
+    std::vector<int> playerACardsLeftover;
+    std::for_each(playerACards.begin(), playerACards.end(), [&playerACardsLeftover, &cardsToRemove] (Card card) {
+        if (std::find(cardsToRemove.begin(), cardsToRemove.end(), card.getRank()) != cardsToRemove.end()) playerACardsLeftover.push_back(card.getRank());
+    });
+    std::vector<Card> playerBCards = loadHandAndTable(playerB);
+    std::vector<int> playerBCardsLeftover;
+        std::for_each(playerBCards.begin(), playerBCards.end(), [&playerBCardsLeftover, &cardsToRemove] (Card card) {
+        if (std::find(cardsToRemove.begin(), cardsToRemove.end(), card.getRank()) != cardsToRemove.end()) playerBCardsLeftover.push_back(card.getRank());
+    });
+    for (int i = 0; i < playerACardsLeftover.size() && i < playerBCardsLeftover.size() && i < limitOfKickers; i++) {
+        if (compareInt(playerACardsLeftover[i], playerBCardsLeftover[i]) != 0) {
+            return compareInt(playerACardsLeftover[i], playerBCardsLeftover[i]);
+        }
+    }
+    return 0;
+}
 
 int Game::compareHands(Player playerA, Player playerB) {
-    int AType = handType(playerA);
-    int BType = handType(playerB);
+    int AType = handRank(playerA);
+    int BType = handRank(playerB);
 
     if (AType > BType) {
         return 1;
     } else if (AType < BType) {
         return -1;
     } else {
-        int compareKickers(std::vector<int> cardsToRemove, int limitOfKickers) {
-            std::vector<Card> playerACards = loadHandAndTable(playerA);
-            std::vector<int> playerACardsLeftover;
-            std::for_each(playerACards.begin(), playerACards.end(), [&playerACardsLeftover, &cardsToRemove] (Card card) {if (cardsToRemove.find(card.getRank()) != cardsToRemove.end()) playerACardsLeftover.push_back(card.getRank();)};
-            std::vector<Card> playerBCards = loadHandAndTable(playerB);
-            std::vector<int> playerBCardsLeftover;
-            std::for_each(playerBCards.begin(), playerBCards.end(), [&playerBCardsLeftover, &cardsToRemove] (Card card) {if (cardsToRemove.find(card.getRank()) != cardsToRemove.end()) playerBCardsLeftover.push_back(card.getRank();)};
-            for (int i = 0; i < playerACardsLeftOver.size() && i < playerBCardsLeftover.size() && i < limitOfKickers; i++) {
-                if (compareInt(playerACardsLeftOver[i], playerBCardsLeftOver[i]) != 0) {
-                    return compareInt(playerACardsLeftOver[i], playerBCardsLeftOver[i]);
-                }
-            }
-            return 0;
-        }
-
         //Full house with same triple, compare the pair.
-        if (Atype > 700 && Atype < 800) {
+        if (AType > 700 && AType < 800) {
             return compareInt(hasFullHouse(playerA)[1], hasFullHouse(playerB)[1]);
         }
         //Three of a kind: Check up to 2 kickers.
         if (AType > 400 && AType < 500) {
             int tripleRank = AType % 100;
-            return compareKickers({tripleRank}, 2);
+            return compareKickers({tripleRank}, 2, playerA, playerB);
         }
 
         //Two pair check second pair, then check 1 kicker.
@@ -295,7 +297,7 @@ int Game::compareHands(Player playerA, Player playerB) {
             int playerASecondPair = hasTwoPair(playerA)[1];
             int playerBSecondPair = hasTwoPair(playerB)[1];
             if (compareInt(playerASecondPair, playerBSecondPair) == 0) {
-                return compareKickers({AType % 100, playerASecondPair}, 1);
+                return compareKickers({AType % 100, playerASecondPair}, 1, playerA, playerB);
             } else {
                 return compareInt(playerASecondPair, playerBSecondPair);
             }
@@ -303,12 +305,12 @@ int Game::compareHands(Player playerA, Player playerB) {
 
         //Pair check up to 3 kickers.
         if (AType > 200 && AType < 300) {
-            return compareKickers({AType % 100}, 3);
+            return compareKickers({AType % 100}, 3, playerA, playerB);
         }
 
         //High card check up to 4 kickers.
         if (AType > 100 && AType < 200) {
-            return compareKickers({AType % 100}, 4);
+            return compareKickers({AType % 100}, 4, playerA, playerB);
         }
 
         //Doesn't reach here
@@ -320,15 +322,36 @@ int Game::compareHands(Player playerA, Player playerB) {
 
 void Game::test() {
 
-    table.push_back(Card(Spade, 1));
+    /**
+     * Setup table:
+     * S11, S13, C10, H10, S10
+     */
+    table.push_back(Card(Spade, 9));
     table.push_back(Card(Spade, 13));
     table.push_back(Card(Club, 10));
     table.push_back(Card(Heart, 10));
     table.push_back(Card(Spade, 10));
+
+    /**
+     * Setup player A:
+     * D10, C13
+     */
     players[0].getHand().pop_back();
     players[0].getHand().pop_back();
-    players[0].getHand().push_back(Card(Diamond, 10));
-    players[0].getHand().push_back(Card(Club, 13));
+    players[0].getHand().push_back(Card(Diamond, 9));
+    players[0].getHand().push_back(Card(Club, 12));
+
+    /**
+     * Setup player B:
+     * D13, C1
+     */
+    players[1].getHand().pop_back();
+    players[1].getHand().pop_back();
+    players[1].getHand().push_back(Card(Diamond, 13));
+    players[1].getHand().push_back(Card(Club, 1));
+
+    std::cout << "player A rank: " << handRank(players[0]) << " | player B rank: " << handRank(players[1]) << std::endl;
+    std::cout << compareHands(players[0], players[1]) << std::endl;
 
 
 }

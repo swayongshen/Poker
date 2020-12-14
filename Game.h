@@ -13,19 +13,34 @@ class Game {
     std::vector<Player> players;
     Deck deck;
     std::vector<Card> table;
+
+    //Helper function to return a vector which contains all cards from table as well as the 2 cards from the player's hand
     std::vector<Card> loadHandAndTable(Player player);
+
     /**
      * The functions below will return the suit and rank of the highest card that fufils the criteria
      * i.e if a flush is 3, 4, 7, 9, 10 spades, hasFlush will return 10.
      * If criteria is not fufilled, return 0.
      */
-    std::pair<Suit, int> hasFlush(Player player);
+    std::vector <int> hasFlush(Player player);
 
+    
+    //Helper function to check if there are n consecutively ranked cards in the input.
     int hasNConsecutive(std::vector<int> cardRanks, int n);
 
-    std::pair<Suit, int> hasStraight(Player player);
+    /**
+     * Returns the rank of the highest card in the straight if there is a straight.
+     * Return -1 if there is no straight flush.
+     */
+    int hasStraight(Player player);
 
-    std::pair<Suit, int> hasStraightFlush(Player player);
+    /**
+     * Returns the rank of the highest card in the straight flush if there is a straight flush.
+     * Return -1 if there is no straight flush.
+     */
+    int hasStraightFlush(Player player);
+
+    //hasRoyalFlush is not needed because it is just hasStraightFlush which returns 14.
     //std::pair<Suit, int> hasRoyalFlush(Player player);
 
     /**
@@ -35,23 +50,34 @@ class Game {
      */
     std::vector<int> hasPairTripsQuads(Player player);
 
+    //Returns {highest triple, highest pair} where the triple and the pair forms a full house.
     std::vector<int> hasFullHouse(Player player);
 
-    /**
-     * Returns {Highest pair, second highest pair} if any.
-     */
+    
+    //Returns {Highest pair, second highest pair} if any.
     std::vector<int> hasTwoPair(Player player);
 
+    //Returns the rank of the highest ranked card available to player.
     int getHighCard(Player player);
 
     /**
      * There are 10 types of poker hands. Returns XYY where X is the prefix which represents the type of hand
      * e.g. 10 for royal flush, 1 for high card. YY is the value associated. E.g. 14 for Ace. 
      * A royal flush would return 1014 and a straight flush with 10 as the highest card will return 910.
+     * 
+     * This is a preliminary rank, if 2 players have the same hand rank, we might have to compare kicker cards.
      */
     int handRank(Player player);
 
+    //Returns 1 if A > B, -1 if A < B and 0 if A == B.
     static int compareInt(int A, int B);
+
+    /**
+     * Compare up to limitOfKicker number of cards between playerA and playerB excluding the cards to remove from comparison.
+     * E.g. if both player A and B have a pair of 5 cardsToRmoeve = {5}, we remove the pair of 5 from consideration 
+     * then compare the highest 3 (limitOfKickers = 3) from rest of their cards to see who has a higher kicker.
+     */
+    int compareKickers(std::vector<int> cardsToRemove, int limitOfKickers, Player playerA, Player playerB);
 
     /**
      * Returns 0 if equal hands, 1 if playerA's hand is better than playerB's hand
