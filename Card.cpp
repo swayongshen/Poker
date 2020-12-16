@@ -6,13 +6,13 @@
 std::string suitToName(Suit suit) {
     switch (suit) {
         case(Club):
-            return "Club";
+            return "C";
         case(Diamond):
-            return "Diamond";
+            return "D";
         case(Heart):
-            return "Heart";
+            return "H";
         case (Spade):
-            return "Spade";
+            return "S";
     }
     return "Bug";
 }

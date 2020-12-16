@@ -322,36 +322,38 @@ int Game::compareHands(Player playerA, Player playerB) {
 
 void Game::test() {
 
-    /**
-     * Setup table:
-     * S11, S13, C10, H10, S10
-     */
-    table.push_back(Card(Spade, 9));
-    table.push_back(Card(Spade, 13));
-    table.push_back(Card(Club, 10));
-    table.push_back(Card(Heart, 10));
-    table.push_back(Card(Spade, 10));
+    // /**
+    //  * Setup table:
+    //  * S11, S13, C10, H10, S10
+    //  */
+    // table.push_back(Card(Spade, 9));
+    // table.push_back(Card(Spade, 13));
+    // table.push_back(Card(Club, 10));
+    // table.push_back(Card(Heart, 10));
+    // table.push_back(Card(Spade, 10));
 
-    /**
-     * Setup player A:
-     * D10, C13
-     */
-    players[0].getHand().pop_back();
-    players[0].getHand().pop_back();
-    players[0].getHand().push_back(Card(Diamond, 9));
-    players[0].getHand().push_back(Card(Club, 12));
+    // /**
+    //  * Setup player A:
+    //  * D10, C13
+    //  */
+    // players[0].getHand().pop_back();
+    // players[0].getHand().pop_back();
+    // players[0].getHand().push_back(Card(Diamond, 9));
+    // players[0].getHand().push_back(Card(Club, 12));
 
-    /**
-     * Setup player B:
-     * D13, C1
-     */
-    players[1].getHand().pop_back();
-    players[1].getHand().pop_back();
-    players[1].getHand().push_back(Card(Diamond, 13));
-    players[1].getHand().push_back(Card(Club, 1));
+    // /**
+    //  * Setup player B:
+    //  * D13, C1
+    //  */
+    // players[1].getHand().pop_back();
+    // players[1].getHand().pop_back();
+    // players[1].getHand().push_back(Card(Diamond, 13));
+    // players[1].getHand().push_back(Card(Club, 1));
 
-    std::cout << "player A rank: " << handRank(players[0]) << " | player B rank: " << handRank(players[1]) << std::endl;
-    std::cout << compareHands(players[0], players[1]) << std::endl;
+    // std::cout << "player A rank: " << handRank(players[0]) << " | player B rank: " << handRank(players[1]) << std::endl;
+    // std::cout << compareHands(players[0], players[1]) << std::endl;
+
+    
 
 
 }
@@ -361,22 +363,81 @@ Game::Game() {
     this->players = std::vector<Player>();
     this->deck = Deck();
     this->table = std::vector<Card>();
+    this->pot = 0;
 }
 
 
 
-void Game::addPlayer(std::string name) {
-    Player newPlayer(name);
+void Game::addPlayer(std::string name, int chips) {
+    Player newPlayer(name, chips);
     players.push_back(newPlayer);
 }
 
 void Game::firstDeal() {
-    for (Player& player : players) {
-        Card firstCard = deck.dealCard();
-        player.receiveDeal(firstCard);
-        Card secondCard = deck.dealCard();
-        player.receiveDeal(secondCard);
+    for (int i = 0; i < players.size(); i++) {
+        players[i] = players[i].receiveDeal({deck.dealCard(), deck.dealCard()});
     }
 }
 
+Card Game::draw() {
+    return deck.dealCard();
+}
+
+void Game::restartDeck() {
+    this->deck = Deck();
+}
+
+void Game::rotatePlayersLeft(int d) {
+    int n = players.size();
+    /* To handle if d >= n */
+    d = d % n; 
+    int g_c_d = std::__gcd(d, n); 
+    for (int i = 0; i < g_c_d; i++) { 
+        /* move i-th values of blocks */
+        Player temp = players[i]; 
+        int j = i; 
+  
+        while (1) { 
+            int k = j + d; 
+            if (k >= n) 
+                k = k - n; 
+  
+            if (k == i) 
+                break; 
+  
+            players[j] = players[k]; 
+            j = k; 
+        } 
+        players[j] = temp; 
+    } 
+}
+
+void Game::bet(int playerIndex, int amt) {
+    try {
+        if (amt <= 0) {
+            throw ("Invalid bet, please bet more than $0.");
+        } else if (amt > players[playerIndex].getChipAmt()) {
+            throw ("Invalid bet, player has insufficient chips.");
+        } else {
+            players[playerIndex] = players[playerIndex].bet(amt);
+        }
+    } catch (std::string exception) {
+        std::cout << exception << std::endl;
+    }
+}
+
+
+void Game::displayTable() {
+    std::cout << "------------------------------\n"; 
+    std::cout << "Table:" << std::endl;
+    
+    //Print all cards on table if any.
+    for (Card card : table) {
+        std::cout << card << " ";
+    }
+    
+    std::cout << "\n\n";
+    std::cout << "Pot: $" + pot << std::endl;
+    std::cout << "------------------------------\n";
+}
 

@@ -13,6 +13,7 @@ class Game {
     std::vector<Player> players;
     Deck deck;
     std::vector<Card> table;
+    int pot;
 
     //Helper function to return a vector which contains all cards from table as well as the 2 cards from the player's hand
     std::vector<Card> loadHandAndTable(Player player);
@@ -79,17 +80,28 @@ class Game {
      */
     int compareKickers(std::vector<int> cardsToRemove, int limitOfKickers, Player playerA, Player playerB);
 
-    /**
-     * Returns 0 if equal hands, 1 if playerA's hand is better than playerB's hand
-     * and -1 if playerA's hand is worse than playerB's hand.
-     */
-    int compareHands(Player playerA, Player playerB);
+    
 
     public:
+        /**
+         * Returns 0 if equal hands, 1 if playerA's hand is better than playerB's hand
+         * and -1 if playerA's hand is worse than playerB's hand.
+         */
+        int compareHands(Player playerA, Player playerB);
+
         Game();
-        void addPlayer(std::string name);
+        void addPlayer(std::string name, int chips);
         void firstDeal();
         void test();
+        Card draw();
+        void restartDeck();
+        //Rotates the players vector left by d places. 
+        void rotatePlayersLeft(int d);
+        void bet(int playerIndex, int amt);
+        void displayTable();
+        void displayTableAndHand(int playerIndex);
+
+        
 };
 
 #endif

@@ -9,11 +9,16 @@
 class Player {
     std::string name;
     std::vector<Card> hand;
+    int chips;
 
     public:
-        Player(std::string name);
-        void receiveDeal(Card card);
+        Player(std::string name, int chips);
+        Player(std::string name, std::vector<Card> hand, int chips);
+        Player receiveDeal(std::vector<Card> cards);
+        Player bet(int amt);
         std::vector<Card>& getHand();
+        std::string getName();
+        int getChipAmt();
 };
 
 #endif
