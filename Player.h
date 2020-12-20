@@ -10,6 +10,7 @@ class Player {
     std::string name;
     std::vector<Card> hand;
     int chips;
+    bool hasFolded = false;
 
     public:
         Player(std::string name, int chips);

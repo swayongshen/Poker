@@ -3,6 +3,9 @@
 #include <ctime>
 #include <cstdlib>
 #include <cstdio>
+#include <sstream>
+
+
 
 int main() {
     /**
@@ -71,6 +74,11 @@ int main() {
     //Deal pocket cards
     game.firstDeal();
     game.displayTable();
+    
+    std::cout << "Wut\n";
+    //Under The Gun's pre-flop
+    int currBet = game.UTGPreflop(smallBlindAmt * 2);
+
     
 
     

@@ -3,6 +3,7 @@
 #include <unordered_set>
 #include <algorithm>
 #include <iostream>
+#include <sstream>
 
 #include "Game.h"
 #include "Card.h"
@@ -441,3 +442,52 @@ void Game::displayTable() {
     std::cout << "------------------------------\n";
 }
 
+void Game::displayTableAndHand(int playerIndex) {
+    displayTable();
+    std::cout << players[playerIndex].getName() << " your turn to act!" << std::endl;
+    std::cout << "Your chips: " + players[playerIndex].getChipAmt() << std::endl;
+    std::cout << "------------------------------\n";
+}
+
+std::vector<std::string> split(const std::string &s, char delim) {
+  std::stringstream ss(s);
+  std::string item;
+  std::vector<std::string> elems;
+  while (std::getline(ss, item, delim)) {
+    elems.push_back(item);
+    // elems.push_back(std::move(item)); // if C++11 (based on comment from @mchiasson)
+  }
+  return elems;
+}
+
+int Game::UTGPreflop(int currBet) {
+    int UTGIndex = 3 % players.size();
+    displayTableAndHand(UTGIndex);
+    while (true) {
+        std::string input;
+        std::cout << "Please enter C to call the current bet of: $" + currBet << std::endl;
+        std::cout << "or enter F to fold your hand" << std::endl;
+        std::cout << "or enter R followed by the amount that you wish to raise the bet by. e.g. R 50" << std::endl;
+        getline(std::cin, input);
+
+        if (input == "C") {
+            if (players[UTGIndex].getChipAmt() >= currBet) {
+                return 0;
+            } else {
+                std::cout << "You do not have enough chips.\n";
+                continue;
+            }
+        } else if (input == "F") {
+            return -1;
+        } else if (split(input, ' ')[0] == "R") {
+            int raiseAmt = std::stoi(split(input, ' ')[1]);
+            if (players[UTGIndex].getChipAmt() >= currBet + raiseAmt) {
+                return raiseAmt;
+            } else {
+                std::cout << "You do not have enough chips.\n";
+            }
+        } else {
+            std::cout << "Invalid input, please try again.\n";
+        }
+    }
+}

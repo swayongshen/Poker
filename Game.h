@@ -100,6 +100,7 @@ class Game {
         void bet(int playerIndex, int amt);
         void displayTable();
         void displayTableAndHand(int playerIndex);
+        int UTGPreflop(int currBet);
 
         
 };
