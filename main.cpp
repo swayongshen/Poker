@@ -1,10 +1,11 @@
 #include <iostream>
-#include "Game.h"
 #include <ctime>
 #include <cstdlib>
 #include <cstdio>
 #include <sstream>
+#include <limits>
 
+#include "Game.h"
 
 
 int main() {
@@ -19,7 +20,7 @@ int main() {
     std::cout << "Enter the number of players: ";
     int numPlayers;
     while(true) {
-        if (std::cin >> numPlayers) {
+        if (std::cin >> numPlayers && numPlayers > 1) {
             std::cout << std::endl;
             break;
         } else {
@@ -44,6 +45,8 @@ int main() {
             std::cout << "Please enter an amount more than 0." << std::endl;
         }
     }
+    std::cin.clear();
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
     //Add players, each player has $500 chips
     for (int i = 0; i < numPlayers; i++) {
@@ -54,7 +57,7 @@ int main() {
     srand(time(NULL));
     int dealerPosition = rand() % numPlayers;
 
-    std::cout << "Player " + std::to_string(dealerPosition + 1) + " has been chosen randomly to be the dealer. \n\n"; 
+    std::cout << "Player " + std::to_string(dealerPosition) + " has been chosen randomly to be the dealer. \n\n"; 
 
     //Rotate the players vector to make dealer the first player in vector.
     game.rotatePlayersLeft(dealerPosition);
@@ -73,13 +76,21 @@ int main() {
 
     //Deal pocket cards
     game.firstDeal();
-    game.displayTable();
-    
-    std::cout << "Wut\n";
-    //Under The Gun's pre-flop
-    int currBet = game.UTGPreflop(smallBlindAmt * 2);
+
+    //Each player, starting from under the gun starts their preflop action
+    int UTGIndex = 3 % numPlayers;
+    for (int i = 0; i < numPlayers; i++) {
+        int playerIndex = (i + UTGIndex) % numPlayers;
+        game.preflop(playerIndex);
+    }
 
     
+
+
+
+
+
+
 
     
 

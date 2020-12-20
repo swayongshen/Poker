@@ -7,13 +7,31 @@
 
 #include "Deck.h"
 #include "Card.h"
-#include "Player.h"
 
 class Game {
+    class Player {
+        friend class Game;
+        std::string name;
+        std::vector<Card> hand;
+        int chips;
+        bool hasFolded = false;
+
+        Player(std::string name, int chips);
+        Player(std::string name, std::vector<Card> hand, int chips);
+        Player receiveDeal(std::vector<Card> cards);
+        Player bet(int amt);
+        std::vector<Card>& getHand();
+        std::string getName();
+        int getChipAmt();
+    };
+
     std::vector<Player> players;
     Deck deck;
     std::vector<Card> table;
     int pot;
+    std::vector<int> bets;
+
+    
 
     //Helper function to return a vector which contains all cards from table as well as the 2 cards from the player's hand
     std::vector<Card> loadHandAndTable(Player player);
@@ -100,7 +118,7 @@ class Game {
         void bet(int playerIndex, int amt);
         void displayTable();
         void displayTableAndHand(int playerIndex);
-        int UTGPreflop(int currBet);
+        void preflop(int playerIndex);
 
         
 };

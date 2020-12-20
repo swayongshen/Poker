@@ -31,5 +31,5 @@ Card::Card(Suit suit, int rank) {
 }
 
 std::ostream& operator << (std::ostream& output, Card& card) {
-    return output << card.rank << " " << suitToName(card.suit) << std::endl;
+    return output << card.rank << suitToName(card.suit) << " ";
 }
