@@ -124,6 +124,7 @@ class Game {
         void bet(int playerIndex, int amt);
         void displayTable();
         void displayTableAndHand(int playerIndex);
+        void displayTableAndAllUnfoldHands();
         void printStatus(std::string status);
 
         /**

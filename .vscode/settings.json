@@ -47,7 +47,8 @@
         "streambuf": "cpp",
         "typeinfo": "cpp",
         "ctime": "cpp",
-        "sstream": "cpp"
+        "sstream": "cpp",
+        "map": "cpp"
     },
     "C_Cpp.default.intelliSenseMode": "gcc-x64"
 }

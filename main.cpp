@@ -72,6 +72,8 @@ int main() {
     game.restartDeck();
 
     while (true) {
+        game.printStatus("NEW GAME");
+
         //Small blind, big blind added to pot. 
         game.blindsBid(smallBlindAmt);
 
@@ -123,6 +125,5 @@ int main() {
         //At this point, winner has to be determined.
         game.awardWinnersAndRotatePlayers();
     }
-    
 
 }

@@ -414,7 +414,7 @@ int Game::act(int playerIndex) {
         //Raising
         } else if (input.length() > 1 && split(input, ' ')[0] == "R") {
             int raiseAmt = std::stoi(split(input, ' ')[1]);
-            if (players[playerIndex].getChipAmt() >= currBet + raiseAmt) {
+            if (players[playerIndex].getChipAmt() >= currBet - bets[playerIndex]+ raiseAmt) {
                 std::cout << players[playerIndex].name + " raises the bid by $" + std::to_string(raiseAmt) 
                     + " to $" + std::to_string(currBet + raiseAmt) << std::endl;
                 bet(playerIndex, (currBet + raiseAmt) - bets[playerIndex]);
@@ -652,6 +652,12 @@ void Game::awardWinnersAndRotatePlayers() {
             }
         }
 
+        //Print handranks
+        for (int i : handRanks) std::cout << i << " ";
+        std::cout << std::endl;
+        for (int i : bets) std::cout << i << " ";
+        std::cout << std::endl;
+
         //Sort bets by increasing amount
         std::map<int, std::vector<int>> betsMap;
         std::unordered_set<int> playersInvolved;
@@ -659,10 +665,10 @@ void Game::awardWinnersAndRotatePlayers() {
         //For each bet amount, handle it.
         for (int i = 0; i < bets.size(); i++) {
             if (bets[i] != -1) {
-                if (betsMap.find(bets[i]) != betsMap.end()) {
-                    betsMap[i] = {i};
+                if (betsMap.count(bets[i]) == 0) {
+                    betsMap[bets[i]] = {i};
                 } else {
-                    betsMap[i].push_back(i);
+                    betsMap[bets[i]].push_back(i);
                 }
                 playersInvolved.insert(i);
             }
@@ -670,7 +676,11 @@ void Game::awardWinnersAndRotatePlayers() {
 
         //Determine who wins each bet amount
         for (auto& pair : betsMap) {
-            std::cout << pair.first << std::endl;
+            std::cout << "Amt: " << pair.first << " | ";
+            for (auto& i : pair.second) {
+                std::cout << i;
+            }
+            std::cout << std::endl;
 
             //Get the players who won this bet amount
             std::vector<int> topPlayers;
@@ -722,5 +732,6 @@ void Game::awardWinnersAndRotatePlayers() {
     }
     rotatePlayersLeft(1);
     restartDeck();
+    this->table = std::vector<Card>();
     printStatus("GAME ENDED");
 }
