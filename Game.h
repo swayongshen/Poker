@@ -23,6 +23,8 @@ class Game {
         std::vector<Card>& getHand();
         std::string getName();
         int getChipAmt();
+        Player awardChips(int amt);
+        Player resetHand();
     };
 
     std::vector<Player> players;
@@ -100,6 +102,8 @@ class Game {
 
     int act(int playerIndex);
 
+    bool allOthersFolded(int playerIndex);
+
     public:
         /**
          * Returns 0 if equal hands, 1 if playerA's hand is better than playerB's hand
@@ -140,8 +144,14 @@ class Game {
         //Burn 1 card and draw 3 cards for the flop.
         void dealFlop();
 
-        //Burn 1 card and deal the turn card
-        void dealTurn();
+        //Burn 1 card and deal the turn/river card
+        void dealTurnOrRiver();
+
+        //Return the playerIndex of the winner if there is one, and -1 if none yet.
+        int hasWinner();
+
+        //Decides who won and awards the player(s) and rotate the table clockwise by 1 position.
+        void awardWinnersAndRotatePlayers();
 };
 
 #endif

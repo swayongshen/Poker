@@ -71,28 +71,58 @@ int main() {
     //Reshuffle after using cards to decide who to be dealer
     game.restartDeck();
 
-    //Small blind, big blind added to pot. 
-    game.blindsBid(smallBlindAmt);
+    while (true) {
+        //Small blind, big blind added to pot. 
+        game.blindsBid(smallBlindAmt);
 
-    //Deal pocket cards
-    game.firstDeal();
+        /**
+         * Pre-flop
+         */
+        //Deal pocket cards
+        game.firstDeal();
+        //Each player after the big blind starting from the under the gun starts their preflop action
+        game.printStatus("PRE-FLOP");
+        game.preFlopRound();
+        if (game.hasWinner() != -1) {
+            game.awardWinnersAndRotatePlayers();
+            continue;
+        }
 
-    //Each player after the big blind starting from the under the gun starts their preflop action
-    game.printStatus("PRE-FLOP");
-    game.preFlopRound();
+        /**
+         * Flop
+         */
+        //Burns 1 card and draws 3 card before flop
+        game.dealFlop();
+        //Round 2 betting after flop, starting from small blind after dealer.
+        game.printStatus("FLOP");
+        game.round(0);
+        if (game.hasWinner() != -1) {
+            game.awardWinnersAndRotatePlayers();
+            continue;
+        }
 
-    //Burns 1 card and draws 3 card before flop
-    game.dealFlop();
+        /**
+         * Turn
+         */
+        //Burns another card and deal 1 card for the turn
+        game.dealTurnOrRiver();
+        game.printStatus("TURN");
+        game.round(0);
+        if (game.hasWinner() != -1) {
+            game.awardWinnersAndRotatePlayers();
+            continue;
+        }
 
-    //Round 2 betting after flop, starting from small blind after dealer.
-    game.printStatus("FLOP");
-    game.round(0);
-
-    //Burns another card and deal 1 card for the turn
-    game.dealTurn();
-
-    game.printStatus("TURN");
-    game.round(0);
+        /**
+         * River
+         */
+        //Burns a card and deal 1 card for the river.
+        game.dealTurnOrRiver();
+        game.printStatus("RIVER");
+        game.round(0);
+        //At this point, winner has to be determined.
+        game.awardWinnersAndRotatePlayers();
+    }
     
 
 }

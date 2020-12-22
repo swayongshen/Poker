@@ -1,5 +1,6 @@
 #include <vector>
 #include <unordered_map>
+#include <map>
 #include <unordered_set>
 #include <algorithm>
 #include <iostream>
@@ -9,6 +10,10 @@
 #include "Game.h"
 #include "Card.h"
 
+/**
+ * Private methods
+ * -------------------------------------------
+ */
 Game::Player::Player(std::string name, int chips) {
     this->name = name;
     this->hand = std::vector<Card>();
@@ -44,6 +49,14 @@ std::string Game::Player::getName() {
 
 int Game::Player::getChipAmt() {
     return chips;
+}
+
+Game::Player Game::Player::awardChips(int amt) {
+    return Player(name, hand, chips + amt);
+}
+
+Game::Player Game::Player::resetHand() {
+    return Player(name, std::vector<Card>(), chips);
 }
 
 std::vector<Card> Game::loadHandAndTable(Player player) {
@@ -383,7 +396,7 @@ int Game::act(int playerIndex) {
             std::cout << "Enter C to call the current bet of: $" + std::to_string(currBet) + ","<< std::endl;
             
         }
-        std::cout << "Enter R X to raise the current bet by $X e.g. R 40" << std::endl;
+        std::cout << "Enter R X to raise/make a higher bet by $X e.g. R 40" << std::endl;
         std::cout << "Enter F to fold your hand," << std::endl;
         
         
@@ -418,46 +431,20 @@ int Game::act(int playerIndex) {
     }  
 }
 
-
-void Game::test() {
-
-    // /**
-    //  * Setup table:
-    //  * S11, S13, C10, H10, S10
-    //  */
-    // table.push_back(Card(Spade, 9));
-    // table.push_back(Card(Spade, 13));
-    // table.push_back(Card(Club, 10));
-    // table.push_back(Card(Heart, 10));
-    // table.push_back(Card(Spade, 10));
-
-    // /**
-    //  * Setup player A:
-    //  * D10, C13
-    //  */
-    // players[0].getHand().pop_back();
-    // players[0].getHand().pop_back();
-    // players[0].getHand().push_back(Card(Diamond, 9));
-    // players[0].getHand().push_back(Card(Club, 12));
-
-    // /**
-    //  * Setup player B:
-    //  * D13, C1
-    //  */
-    // players[1].getHand().pop_back();
-    // players[1].getHand().pop_back();
-    // players[1].getHand().push_back(Card(Diamond, 13));
-    // players[1].getHand().push_back(Card(Club, 1));
-
-    // std::cout << "player A rank: " << handRank(players[0]) << " | player B rank: " << handRank(players[1]) << std::endl;
-    // std::cout << compareHands(players[0], players[1]) << std::endl;
-
-    
-
-
+bool Game::allOthersFolded(int playerIndex) {
+    for (int i = 0; i < players.size(); i++) {
+        if (i != playerIndex && bets[i] != -1) {
+            return false;
+        }
+    }
+    return true;
 }
 
 
+/**
+ * Public methods
+ * -----------------------------------------------
+ */
 Game::Game() {
     this->players = std::vector<Player>();
     this->deck = Deck();
@@ -581,6 +568,9 @@ int Game::round(int playerIndex, bool isPreFlop) {
     while (i < loopMax) {
         //Start from the player after the player who raised.
         int playerIndex = (i + raisedByPlayer + 1) % numPlayers;
+        if (i == loopMax - 1 && allOthersFolded(playerIndex)) {
+            return raisedByPlayer;
+        }
         int playerTurn = act(playerIndex);
         if (playerTurn == 1) {
             //If player raises, restarts loop but the raisedByPlayer is set to the player who raised.
@@ -608,9 +598,129 @@ void Game::dealFlop() {
     }
 }
 
-void Game::dealTurn() {
+void Game::dealTurnOrRiver() {
     //Burn
     draw();
 
     table.push_back(draw());
+}
+
+int Game::hasWinner() {
+    int winnerIndex = -1;
+
+    for (int i = 0; i < bets.size(); i++) {
+        if (bets[i] != -1) {
+            //Has at least 2 players that hasn't folded.
+            if (winnerIndex != -1) {
+                return -1;
+            } else {
+                winnerIndex = i;
+            }
+        }
+    }
+    return winnerIndex;
+}
+
+void Game::awardWinnersAndRotatePlayers() {
+    int winnerIndex = hasWinner();
+    //Vector to keep track of amount players won so that it can be printed afterwards.
+    std::vector<int> winAmt(players.size(), 0);
+
+    //If winnerIndex != -1 means there is a clear winner others folded.
+    if (winnerIndex != -1) {
+        players[winnerIndex] = players[winnerIndex].awardChips(pot);
+        winAmt[winnerIndex] += pot;
+    } else {
+        std::vector<int> handRanks;
+        for (int i = 0; i < players.size(); i++) {
+            if (bets[i] != -1) {
+                handRanks.push_back(handRank(players[i]));
+            } else {
+                handRanks.push_back(-1);
+            }
+        }
+
+        for (int i = 0; i < players.size(); i++) {
+            if (handRanks[i] != -1) {
+                for (int j = 0; j < players.size(); j++) {
+                    if (i != j && handRanks[i] == handRanks[j]) {
+                        if (compareHands(players[i], players[j]) == 1) {
+                            handRanks[i] += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        //Sort bets by increasing amount
+        std::map<int, std::vector<int>> betsMap;
+        std::unordered_set<int> playersInvolved;
+
+        //For each bet amount, handle it.
+        for (int i = 0; i < bets.size(); i++) {
+            if (bets[i] != -1) {
+                if (betsMap.find(bets[i]) != betsMap.end()) {
+                    betsMap[i] = {i};
+                } else {
+                    betsMap[i].push_back(i);
+                }
+                playersInvolved.insert(i);
+            }
+        }
+
+        //Determine who wins each bet amount
+        for (auto& pair : betsMap) {
+            std::cout << pair.first << std::endl;
+
+            //Get the players who won this bet amount
+            std::vector<int> topPlayers;
+            for (int playerIndex : playersInvolved) {
+                if (topPlayers.size() != 0) {
+                    if (handRanks[playerIndex] > handRanks[topPlayers[0]]) {
+                        topPlayers = {playerIndex};
+                    }
+                } else {
+                    topPlayers = {playerIndex};
+                }
+            }
+
+            //Distribute the money which is bet amount * num of players involved
+            int totalAmount = pair.first * playersInvolved.size();
+            int splitAmt = (int) (totalAmount / topPlayers.size());
+            for (int winningPlayerIdx : topPlayers) {
+                players[winningPlayerIdx].awardChips(splitAmt);
+                winAmt[winningPlayerIdx] += splitAmt;
+            }
+
+            //Remove the people who bet this amount as they do not qualify for the next amounts.
+            for (int playerIdx : pair.second) {
+                playersInvolved.erase(playerIdx);
+            }
+            
+            //Deduct the bet amount from the rest of bets.
+            for (auto& otherPair : betsMap) {
+                int originalBetAmt = otherPair.first;
+                std::vector<int> playersWhoBetThisAmt = otherPair.second;
+                betsMap.erase(originalBetAmt);
+                betsMap[originalBetAmt - pair.first] = playersWhoBetThisAmt; 
+            }
+        }
+    }
+
+    //Print out the amount that players have won
+    for (int i = 0; i < players.size(); i++) {
+        if (winAmt[i] != 0) {
+            std::cout << players[i].name << " has won $" << winAmt[i] << "!\n";
+        }
+    }
+
+    //Restore state for next game/hand.
+    pot = 0;
+    for (int i = 0; i < players.size(); i++) {
+        bets[i] = 0;
+        players[i] = players[i].resetHand();
+    }
+    rotatePlayersLeft(1);
+    restartDeck();
+    printStatus("GAME ENDED");
 }
