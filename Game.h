@@ -98,7 +98,7 @@ class Game {
      */
     int compareKickers(std::vector<int> cardsToRemove, int limitOfKickers, Player playerA, Player playerB);
 
-    
+    int act(int playerIndex);
 
     public:
         /**
@@ -113,14 +113,35 @@ class Game {
         void test();
         Card draw();
         void restartDeck();
+        //Small blind and big blind put into pot.
+        void blindsBid(int smallBlindAmt);
         //Rotates the players vector left by d places. 
         void rotatePlayersLeft(int d);
         void bet(int playerIndex, int amt);
         void displayTable();
         void displayTableAndHand(int playerIndex);
-        void preflop(int playerIndex);
+        void printStatus(std::string status);
 
+        /**
+         * playerIndex takes in the vector index of the player who raised the bet.
+         * the betting round begins from the next player.
+         * 
+         * The method serves to simulate a round of poker whereby everyone acts until
+         * all players have either folded or called the last raise. 
+         */
+        int round(int playerIndex, bool isPreFlop = false);
+
+        /**
+         * Calls round(2 % numPlayers, true) which starts the round from after the big blind
+         * and also has an additional turn to allow big blind to check/raise.
+         */
+        int preFlopRound();
         
+        //Burn 1 card and draw 3 cards for the flop.
+        void dealFlop();
+
+        //Burn 1 card and deal the turn card
+        void dealTurn();
 };
 
 #endif

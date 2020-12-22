@@ -357,6 +357,67 @@ int Game::compareHands(Player playerA, Player playerB) {
     }
 }
 
+//Helper function to split string
+std::vector<std::string> split(const std::string &s, char delim) {
+  std::stringstream ss(s);
+  std::string item;
+  std::vector<std::string> elems;
+  while (std::getline(ss, item, delim)) {
+    elems.push_back(std::move(item)); // if C++11 (based on comment from @mchiasson)
+  }
+  return elems;
+}
+
+int Game::act(int playerIndex) {
+    //Player has folded or has no more chips to act on.
+    if (bets[playerIndex] == -1 || players[playerIndex].getChipAmt() == 0) return -1;
+
+    int currBet = *std::max_element(bets.begin(), bets.end());
+    displayTableAndHand(playerIndex);
+
+    while (true) {
+        std::string input;
+        if (currBet == bets[playerIndex]) {
+            std::cout << "Enter K to check your current bet of: $" + std::to_string(currBet) + "," << std::endl;
+        } else {
+            std::cout << "Enter C to call the current bet of: $" + std::to_string(currBet) + ","<< std::endl;
+            
+        }
+        std::cout << "Enter R X to raise the current bet by $X e.g. R 40" << std::endl;
+        std::cout << "Enter F to fold your hand," << std::endl;
+        
+        
+        getline(std::cin, input);
+        //Calling
+        if (input == "C" && currBet > bets[playerIndex]) {
+                std::cout << players[playerIndex].name + " calls.\n";
+                bet(playerIndex, (currBet - bets[playerIndex]));
+                return 0;
+        //Folding
+        } else if (input == "F") {
+            std::cout << players[playerIndex].name + " folds.\n";
+            bets[playerIndex] = -1;
+            return -1;
+        //Raising
+        } else if (input.length() > 1 && split(input, ' ')[0] == "R") {
+            int raiseAmt = std::stoi(split(input, ' ')[1]);
+            if (players[playerIndex].getChipAmt() >= currBet + raiseAmt) {
+                std::cout << players[playerIndex].name + " raises the bid by $" + std::to_string(raiseAmt) 
+                    + " to $" + std::to_string(currBet + raiseAmt) << std::endl;
+                bet(playerIndex, (currBet + raiseAmt) - bets[playerIndex]);
+                return 1;
+            } else {
+                std::cout << "You do not have enough chips.\n";
+            }
+        } else if (input == "K" && currBet == bets[playerIndex]) {
+            std::cout << players[playerIndex].name + " checks.";
+            return 0;
+        } else {
+            std::cout << "Invalid input, please try again.\n";
+        }
+    }  
+}
+
 
 void Game::test() {
 
@@ -411,7 +472,6 @@ void Game::addPlayer(std::string name, int chips) {
     Player newPlayer(name, chips);
     players.push_back(newPlayer);
     bets.push_back(0);
-    std::cout << players.size() << std::endl;
 }
 
 void Game::firstDeal() {
@@ -426,6 +486,11 @@ Card Game::draw() {
 
 void Game::restartDeck() {
     this->deck = Deck();
+}
+
+void Game::blindsBid(int smallBlindAmt) {
+    bet(1 % players.size(), smallBlindAmt);
+    bet(2 % players.size(), smallBlindAmt * 2);
 }
 
 void Game::rotatePlayersLeft(int d) {
@@ -458,10 +523,13 @@ void Game::bet(int playerIndex, int amt) {
         if (amt <= 0) {
             throw ("Invalid bet, please bet more than $0.");
         } else if (amt > players[playerIndex].getChipAmt()) {
-            throw ("Invalid bet, player has insufficient chips.");
+            //If bet exceeds, then just bet everything
+            players[playerIndex] = players[playerIndex].bet(players[playerIndex].getChipAmt());
+            bets[playerIndex] += players[playerIndex].getChipAmt();
+            pot += players[playerIndex].getChipAmt();
         } else {
             players[playerIndex] = players[playerIndex].bet(amt);
-            bets[playerIndex] = bets[playerIndex] + amt;
+            bets[playerIndex] += amt;
             pot += amt;
         }
     } catch (std::string exception) {
@@ -496,55 +564,53 @@ void Game::displayTableAndHand(int playerIndex) {
     std::cout << std::endl;
 }
 
-std::vector<std::string> split(const std::string &s, char delim) {
-  std::stringstream ss(s);
-  std::string item;
-  std::vector<std::string> elems;
-  while (std::getline(ss, item, delim)) {
-    elems.push_back(std::move(item)); // if C++11 (based on comment from @mchiasson)
-  }
-  return elems;
+void Game::printStatus(std::string status) {
+    std::cout << "/****************************\\" << std::endl;
+    std::cout << std::string((30 - status.size())/2, ' ');
+    std::cout << status << std::endl;
+    std::cout << "\\****************************/" << std::endl;
 }
 
-void Game::preflop(int playerIndex) {
-    int currBet = *std::max_element(bets.begin(), bets.end());
-    if (currBet == bets[playerIndex]) return;
-    displayTableAndHand(playerIndex);
-    while (true) {
-        std::string input;
-        std::cout << "Enter C to call the current bet of: $" + std::to_string(currBet) + ","<< std::endl;
-        std::cout << "Enter F to fold your hand," << std::endl;
-        std::cout << "Enter R X to raise the current bet by $X e.g. R 40" << std::endl;
-        
-        getline(std::cin, input);
-        //Calling
-        if (input == "C") {
-            if (players[playerIndex].getChipAmt() >= currBet) {
-                std::cout << players[playerIndex].name + " calls.\n";
-                bet(playerIndex, (currBet - bets[playerIndex]));
-                break;
-            } else {
-                std::cout << "You do not have enough chips.\n";
-                continue;
-            }
-        //Folding
-        } else if (input == "F") {
-            std::cout << players[playerIndex].name + " folds.\n";
-            bets[playerIndex] = -1;
-            break;
-        //Raising
-        } else if (input.length() > 1 && split(input, ' ')[0] == "R") {
-            int raiseAmt = std::stoi(split(input, ' ')[1]);
-            if (players[playerIndex].getChipAmt() >= currBet + raiseAmt) {
-                std::cout << players[playerIndex].name + " raises the bid by $" + std::to_string(raiseAmt) 
-                    + " to $" + std::to_string(currBet + raiseAmt) << std::endl;
-                bet(playerIndex, (currBet + raiseAmt) - bets[playerIndex]);
-                break;
-            } else {
-                std::cout << "You do not have enough chips.\n";
-            }
-        } else {
-            std::cout << "Invalid input, please try again.\n";
+int Game::round(int playerIndex, bool isPreFlop) {
+    int numPlayers = players.size();
+    //raisedByPlayer notes the index of the last player who raised, initialized to BB's index.
+    int raisedByPlayer = playerIndex;
+    int loopMax = isPreFlop ? numPlayers : numPlayers - 1;
+    //Loop will either go through all other players once again or more if there was another raise
+    int i = 0;
+    while (i < loopMax) {
+        //Start from the player after the player who raised.
+        int playerIndex = (i + raisedByPlayer + 1) % numPlayers;
+        int playerTurn = act(playerIndex);
+        if (playerTurn == 1) {
+            //If player raises, restarts loop but the raisedByPlayer is set to the player who raised.
+            raisedByPlayer = playerIndex;
+            //Set i to -1 so that next iteration i = 0
+            i = -1;
+            loopMax = numPlayers - 1;
         }
+        i++;
     }
+    return raisedByPlayer;
+}
+
+int Game::preFlopRound() {
+    return round(2 % players.size(), true);
+}
+
+void Game::dealFlop() {
+    //Draw a card to be burned.
+    draw();
+
+    //Draw 3 cards and add it to the table
+    for (int i = 0; i < 3; i++) {
+        table.push_back(draw());
+    }
+}
+
+void Game::dealTurn() {
+    //Burn
+    draw();
+
+    table.push_back(draw());
 }

@@ -20,11 +20,14 @@ int main() {
     std::cout << "Enter the number of players: ";
     int numPlayers;
     while(true) {
-        if (std::cin >> numPlayers && numPlayers > 1) {
+        std::cin >> numPlayers;
+        if (!std::cin.fail() && numPlayers > 1) {
             std::cout << std::endl;
             break;
         } else {
-            std::cout << "Please enter a valid number of players" << std::endl;
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
+            std::cout << "Please enter a valid number of players: ";
         }
     }
 
@@ -38,11 +41,14 @@ int main() {
     std::cout << "Please enter the small blind amount for the table: ";
     int smallBlindAmt;
     while(true) {
-        if (std::cin >> smallBlindAmt && smallBlindAmt > 0) {
+        std::cin >> smallBlindAmt;
+        if (!std::cin.fail() && smallBlindAmt > 0) {
             std::cout << std::endl;
             break;
         } else {
-            std::cout << "Please enter an amount more than 0." << std::endl;
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
+            std::cout << "Please enter a number greater than 0: ";
         }
     }
     std::cin.clear();
@@ -66,34 +72,27 @@ int main() {
     game.restartDeck();
 
     //Small blind, big blind added to pot. 
-    if (numPlayers >= 3) {
-        game.bet(1, smallBlindAmt);
-        game.bet(2, smallBlindAmt * 2);
-    } else {
-        game.bet(1, smallBlindAmt);
-        game.bet(0, smallBlindAmt * 2);
-    }
+    game.blindsBid(smallBlindAmt);
 
     //Deal pocket cards
     game.firstDeal();
 
-    //Each player, starting from under the gun starts their preflop action
-    int UTGIndex = 3 % numPlayers;
-    for (int i = 0; i < numPlayers; i++) {
-        int playerIndex = (i + UTGIndex) % numPlayers;
-        game.preflop(playerIndex);
-    }
+    //Each player after the big blind starting from the under the gun starts their preflop action
+    game.printStatus("PRE-FLOP");
+    game.preFlopRound();
 
-    
+    //Burns 1 card and draws 3 card before flop
+    game.dealFlop();
 
+    //Round 2 betting after flop, starting from small blind after dealer.
+    game.printStatus("FLOP");
+    game.round(0);
 
+    //Burns another card and deal 1 card for the turn
+    game.dealTurn();
 
-
-
-
-
-    
-
+    game.printStatus("TURN");
+    game.round(0);
     
 
 }
