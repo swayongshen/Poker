@@ -153,6 +153,9 @@ class Game {
 
         //Decides who won and awards the player(s) and rotate the table clockwise by 1 position.
         void awardWinnersAndRotatePlayers();
+
+        //Check user input whether to continue game
+        bool isContinueGame();
 };
 
 #endif

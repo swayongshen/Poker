@@ -21,7 +21,7 @@ int main() {
     int numPlayers;
     while(true) {
         std::cin >> numPlayers;
-        if (!std::cin.fail() && numPlayers > 1) {
+        if (!std::cin.fail() && numPlayers > 1 && numPlayers <= 11) {
             std::cout << std::endl;
             break;
         } else {
@@ -63,7 +63,7 @@ int main() {
     srand(time(NULL));
     int dealerPosition = rand() % numPlayers;
 
-    std::cout << "Player " + std::to_string(dealerPosition) + " has been chosen randomly to be the dealer. \n\n"; 
+    std::cout << "Player " + std::to_string(dealerPosition) + " has been chosen randomly to be the first dealer. \n\n"; 
 
     //Rotate the players vector to make dealer the first player in vector.
     game.rotatePlayersLeft(dealerPosition);
@@ -87,7 +87,11 @@ int main() {
         game.preFlopRound();
         if (game.hasWinner() != -1) {
             game.awardWinnersAndRotatePlayers();
-            continue;
+            if (game.isContinueGame()) {
+                continue;
+            } else {
+                break;
+            }
         }
 
         /**
@@ -97,10 +101,15 @@ int main() {
         game.dealFlop();
         //Round 2 betting after flop, starting from small blind after dealer.
         game.printStatus("FLOP");
-        game.round(0);
+        game.displayTable();
+        game.round(0, true);
         if (game.hasWinner() != -1) {
             game.awardWinnersAndRotatePlayers();
-            continue;
+            if (game.isContinueGame()) {
+                continue;
+            } else {
+                break;
+            }
         }
 
         /**
@@ -109,10 +118,15 @@ int main() {
         //Burns another card and deal 1 card for the turn
         game.dealTurnOrRiver();
         game.printStatus("TURN");
-        game.round(0);
+        game.displayTable();
+        game.round(0, true);
         if (game.hasWinner() != -1) {
             game.awardWinnersAndRotatePlayers();
-            continue;
+            if (game.isContinueGame()) {
+                continue;
+            } else {
+                break;
+            }
         }
 
         /**
@@ -121,9 +135,15 @@ int main() {
         //Burns a card and deal 1 card for the river.
         game.dealTurnOrRiver();
         game.printStatus("RIVER");
-        game.round(0);
+        game.displayTable();
+        game.round(0, true);
         //At this point, winner has to be determined.
         game.awardWinnersAndRotatePlayers();
-    }
+        if (game.isContinueGame()) {
+            continue;
+        } else {
+            break;
+        }
 
+    }
 }

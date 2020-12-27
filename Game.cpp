@@ -309,13 +309,15 @@ int Game::compareKickers(std::vector<int> cardsToRemove, int limitOfKickers, Pla
     std::vector<Card> playerACards = loadHandAndTable(playerA);
     std::vector<int> playerACardsLeftover;
     std::for_each(playerACards.begin(), playerACards.end(), [&playerACardsLeftover, &cardsToRemove] (Card card) {
-        if (std::find(cardsToRemove.begin(), cardsToRemove.end(), card.getRank()) != cardsToRemove.end()) playerACardsLeftover.push_back(card.getRank());
+        if (std::find(cardsToRemove.begin(), cardsToRemove.end(), card.getRank()) == cardsToRemove.end()) playerACardsLeftover.push_back(card.getRank());
     });
     std::vector<Card> playerBCards = loadHandAndTable(playerB);
     std::vector<int> playerBCardsLeftover;
         std::for_each(playerBCards.begin(), playerBCards.end(), [&playerBCardsLeftover, &cardsToRemove] (Card card) {
-        if (std::find(cardsToRemove.begin(), cardsToRemove.end(), card.getRank()) != cardsToRemove.end()) playerBCardsLeftover.push_back(card.getRank());
+        if (std::find(cardsToRemove.begin(), cardsToRemove.end(), card.getRank()) == cardsToRemove.end()) playerBCardsLeftover.push_back(card.getRank());
     });
+    std::sort(playerACardsLeftover.begin(), playerACardsLeftover.end());
+    std::sort(playerBCardsLeftover.begin(), playerBCardsLeftover.end());
     for (int i = 0; i < playerACardsLeftover.size() && i < playerBCardsLeftover.size() && i < limitOfKickers; i++) {
         if (compareInt(playerACardsLeftover[i], playerBCardsLeftover[i]) != 0) {
             return compareInt(playerACardsLeftover[i], playerBCardsLeftover[i]);
@@ -390,17 +392,18 @@ int Game::act(int playerIndex) {
 
     while (true) {
         std::string input;
+        std::cout << "*****************************\n";
         if (currBet == bets[playerIndex]) {
             std::cout << "Enter K to check your current bet of: $" + std::to_string(currBet) + "," << std::endl;
         } else {
-            std::cout << "Enter C to call the current bet of: $" + std::to_string(currBet) + ","<< std::endl;
+            std::cout << "Enter C to call the current highest bet of: $" + std::to_string(currBet) + ","<< std::endl;
             
         }
         std::cout << "Enter R X to raise/make a higher bet by $X e.g. R 40" << std::endl;
         std::cout << "Enter F to fold your hand," << std::endl;
         
-        
-        getline(std::cin, input);
+
+        std::getline(std::cin, input);
         //Calling
         if (input == "C" && currBet > bets[playerIndex]) {
                 std::cout << players[playerIndex].name + " calls.\n";
@@ -423,7 +426,7 @@ int Game::act(int playerIndex) {
                 std::cout << "You do not have enough chips.\n";
             }
         } else if (input == "K" && currBet == bets[playerIndex]) {
-            std::cout << players[playerIndex].name + " checks.";
+            std::cout << players[playerIndex].name + " checks.\n";
             return 0;
         } else {
             std::cout << "Invalid input, please try again.\n";
@@ -536,18 +539,19 @@ void Game::displayTable() {
     
     std::cout << "\n\n";
     std::cout << "Pot: $" + std::to_string(pot) << std::endl;
-    std::cout << "------------------------------\n";
+    std::cout << "------------------------------\n\n";
 }
 
 void Game::displayTableAndHand(int playerIndex) {
     displayTable();
-    std::cout << players[playerIndex].getName() << " your turn to act!" << std::endl;
+    std::cout << "*" + players[playerIndex].getName() << " your turn to act!*" << std::endl;
     std::vector<Card> hand = players[playerIndex].getHand();
     for (Card card : hand) {
         std::cout << card;
     }
     std::cout << std::endl;
     std::cout << "Your chips: $" + std::to_string(players[playerIndex].getChipAmt()) << std::endl;
+    std::cout << "Your current bet: $" + std::to_string(bets[playerIndex]) << std::endl;
     std::cout << std::endl;
 }
 
@@ -558,11 +562,11 @@ void Game::printStatus(std::string status) {
     std::cout << "\\****************************/" << std::endl;
 }
 
-int Game::round(int playerIndex, bool isPreFlop) {
+int Game::round(int playerIndex, bool isFullRound) {
     int numPlayers = players.size();
     //raisedByPlayer notes the index of the last player who raised, initialized to BB's index.
     int raisedByPlayer = playerIndex;
-    int loopMax = isPreFlop ? numPlayers : numPlayers - 1;
+    int loopMax = isFullRound ? numPlayers : numPlayers - 1;
     //Loop will either go through all other players once again or more if there was another raise
     int i = 0;
     while (i < loopMax) {
@@ -621,16 +625,34 @@ int Game::hasWinner() {
     return winnerIndex;
 }
 
+void Game::displayTableAndAllUnfoldHands() {
+    displayTable();
+    for (int i = 0; i < players.size(); i++) {
+        if (bets[i] != -1) {
+            std::cout << players[i].getName() + ":" << std::endl;
+            std::vector<Card> hand = players[i].getHand();
+            for (Card card : hand) {
+                std::cout << card;
+            }
+        }
+        std::cout << std::endl;
+    }
+    std::cout << std::endl;
+}
+
 void Game::awardWinnersAndRotatePlayers() {
+    printStatus("CALCULATING OUTCOME");
     int winnerIndex = hasWinner();
     //Vector to keep track of amount players won so that it can be printed afterwards.
     std::vector<int> winAmt(players.size(), 0);
 
     //If winnerIndex != -1 means there is a clear winner others folded.
     if (winnerIndex != -1) {
+        displayTable();
         players[winnerIndex] = players[winnerIndex].awardChips(pot);
         winAmt[winnerIndex] += pot;
     } else {
+        displayTableAndAllUnfoldHands();
         std::vector<int> handRanks;
         for (int i = 0; i < players.size(); i++) {
             if (bets[i] != -1) {
@@ -652,12 +674,6 @@ void Game::awardWinnersAndRotatePlayers() {
             }
         }
 
-        //Print handranks
-        for (int i : handRanks) std::cout << i << " ";
-        std::cout << std::endl;
-        for (int i : bets) std::cout << i << " ";
-        std::cout << std::endl;
-
         //Sort bets by increasing amount
         std::map<int, std::vector<int>> betsMap;
         std::unordered_set<int> playersInvolved;
@@ -676,11 +692,6 @@ void Game::awardWinnersAndRotatePlayers() {
 
         //Determine who wins each bet amount
         for (auto& pair : betsMap) {
-            std::cout << "Amt: " << pair.first << " | ";
-            for (auto& i : pair.second) {
-                std::cout << i;
-            }
-            std::cout << std::endl;
 
             //Get the players who won this bet amount
             std::vector<int> topPlayers;
@@ -688,6 +699,8 @@ void Game::awardWinnersAndRotatePlayers() {
                 if (topPlayers.size() != 0) {
                     if (handRanks[playerIndex] > handRanks[topPlayers[0]]) {
                         topPlayers = {playerIndex};
+                    } else if (handRanks[playerIndex] == handRanks[topPlayers[0]]) {
+                        topPlayers.push_back(playerIndex);
                     }
                 } else {
                     topPlayers = {playerIndex};
@@ -734,4 +747,26 @@ void Game::awardWinnersAndRotatePlayers() {
     restartDeck();
     this->table = std::vector<Card>();
     printStatus("GAME ENDED");
+}
+
+bool Game::isContinueGame() {
+    std::string continueGame;
+    while(true) {
+        std::cout << "Continue game? (Y/N).\n";
+        std::cin >> continueGame;
+        if (!std::cin.fail() && (continueGame == "N" || continueGame == "Y")) {
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
+            if (continueGame == "N") {
+                std::cout << "Thank you for playing!\n";
+                return false;
+            } else {
+                return true;
+            }
+        } else {
+            std::cout << "Invalid input, try again.\n";
+        }
+    }
+    //Won't reach
+    return false;
 }
