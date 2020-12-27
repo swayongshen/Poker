@@ -405,17 +405,17 @@ int Game::act(int playerIndex) {
 
         std::getline(std::cin, input);
         //Calling
-        if (input == "C" && currBet > bets[playerIndex]) {
+        if (input == "C" || input == "c" && currBet > bets[playerIndex]) {
                 std::cout << players[playerIndex].name + " calls.\n";
                 bet(playerIndex, (currBet - bets[playerIndex]));
                 return 0;
         //Folding
-        } else if (input == "F") {
+        } else if (input == "F" || input == "f") {
             std::cout << players[playerIndex].name + " folds.\n";
             bets[playerIndex] = -1;
             return -1;
         //Raising
-        } else if (input.length() > 1 && split(input, ' ')[0] == "R") {
+        } else if (input.length() > 1 && split(input, ' ')[0] == "R" || split(input, ' ')[0] == "r") {
             int raiseAmt = std::stoi(split(input, ' ')[1]);
             if (players[playerIndex].getChipAmt() >= currBet - bets[playerIndex]+ raiseAmt) {
                 std::cout << players[playerIndex].name + " raises the bid by $" + std::to_string(raiseAmt) 
@@ -425,7 +425,7 @@ int Game::act(int playerIndex) {
             } else {
                 std::cout << "You do not have enough chips.\n";
             }
-        } else if (input == "K" && currBet == bets[playerIndex]) {
+        } else if (input == "K" || input == "k" && currBet == bets[playerIndex]) {
             std::cout << players[playerIndex].name + " checks.\n";
             return 0;
         } else {
@@ -754,10 +754,10 @@ bool Game::isContinueGame() {
     while(true) {
         std::cout << "Continue game? (Y/N).\n";
         std::cin >> continueGame;
-        if (!std::cin.fail() && (continueGame == "N" || continueGame == "Y")) {
+        if (!std::cin.fail() && (continueGame == "N" || continueGame == "Y" || continueGame == "n" || continueGame == "y")) {
             std::cin.clear();
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
-            if (continueGame == "N") {
+            if (continueGame == "N" || continueGame == "n") {
                 std::cout << "Thank you for playing!\n";
                 return false;
             } else {
