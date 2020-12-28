@@ -6,6 +6,8 @@
 #include <iostream>
 #include <sstream>
 #include <limits>
+#include <SFML/Network.hpp>
+#include <SFML/Network/Packet.hpp>
 
 #include "Game.h"
 #include "Card.h"
@@ -448,12 +450,33 @@ bool Game::allOthersFolded(int playerIndex) {
  * Public methods
  * -----------------------------------------------
  */
+void Game::acceptConnections(std::unique_ptr<sf::TcpListener> listenerPtr, int& numPlayers, int maxPlayers) {
+    while (numPlayers < maxPlayers) {
+        // accept a new connection
+        sf::TcpSocket client;
+        sf::TcpListener& listener = *listenerPtr;
+        if (listener.accept(client) != sf::Socket::Done) {
+            std::cout << "Error accepting new connection\n";
+        } else {
+            playerClients.push_back(std::unique_ptr<sf::TcpSocket>(&client));
+            sf::Packet packet;
+            client.receive(packet);
+            std::string playerName;
+            packet >> playerName;
+            addPlayer(playerName, 500);
+            std::cout << playerName + " has joined the game.\n";
+            numPlayers += 1;
+        }
+    }
+}
+
 Game::Game() {
     this->players = std::vector<Player>();
     this->deck = Deck();
     this->table = std::vector<Card>();
     this->pot = 0;
     this->bets = std::vector<int>();
+    this->playerClients = std::vector<std::unique_ptr<sf::TcpSocket>>();
 }
 
 
@@ -490,7 +513,8 @@ void Game::rotatePlayersLeft(int d) {
     int g_c_d = std::__gcd(d, n); 
     for (int i = 0; i < g_c_d; i++) { 
         /* move i-th values of blocks */
-        Player temp = players[i]; 
+        Player temp = players[i];
+        std::unique_ptr<sf::TcpSocket>& temp2 = playerClients[i];
         int j = i; 
   
         while (1) { 
@@ -501,10 +525,14 @@ void Game::rotatePlayersLeft(int d) {
             if (k == i) 
                 break; 
   
-            players[j] = players[k]; 
+            players[j] = players[k];
+            playerClients[j].swap(playerClients[k]);
+            
             j = k; 
         } 
-        players[j] = temp; 
+        players[j] = temp;
+        playerClients[j].swap(temp2);
+
     } 
 }
 

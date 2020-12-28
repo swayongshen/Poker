@@ -4,41 +4,35 @@
 #include <cstdio>
 #include <sstream>
 #include <limits>
+#include <thread>
+#include <SFML/Network.hpp>
 
 #include "Game.h"
 
-
+/**
+ * Game follows instructions from 
+ * https://www.instructables.com/Learn-To-Play-Poker---Texas-Hold-Em-aka-Texas-Ho/
+ */
 int main() {
     /**
-     * Game follows instructions from 
-     * https://www.instructables.com/Learn-To-Play-Poker---Texas-Hold-Em-aka-Texas-Ho/
+     * Configuration of game
      */
-    //Start new game
-    Game game = Game();
 
-    //Get number of players
-    std::cout << "Enter the number of players: ";
-    int numPlayers;
+    //Get max number of players
+    std::cout << "Enter the max number of players: ";
+    int maxPlayers;
     while(true) {
-        std::cin >> numPlayers;
-        if (!std::cin.fail() && numPlayers > 1 && numPlayers <= 11) {
+        std::cin >> maxPlayers;
+        if (!std::cin.fail() && maxPlayers > 1 && maxPlayers <= 11) {
             std::cout << std::endl;
             break;
         } else {
-            std::cin.clear();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
             std::cout << "Please enter a valid number of players: ";
         }
     }
 
-    //If not enough players, return.
-    if (numPlayers <= 1) {
-        std::cout << "Not enough players \n";
-        return 1;
-    }
-
     //Get small blind amount.
-    std::cout << "Please enter the small blind amount for the table: ";
+    std::cout << "Please enter the small blind amount for the game: ";
     int smallBlindAmt;
     while(true) {
         std::cin >> smallBlindAmt;
@@ -46,18 +40,35 @@ int main() {
             std::cout << std::endl;
             break;
         } else {
-            std::cin.clear();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
             std::cout << "Please enter a number greater than 0: ";
         }
     }
     std::cin.clear();
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    
 
-    //Add players, each player has $500 chips
-    for (int i = 0; i < numPlayers; i++) {
-        game.addPlayer("Player " + std::to_string(i), 500);
+    //Start new game
+    Game game = Game();
+
+    /**
+     * Networking
+     */
+    int numPlayers;
+    sf::TcpListener listener;
+    int portNumber = 53000;
+    // bind the listener to a port
+    if (listener.listen(portNumber) != sf::Socket::Done)
+    {
+        std::cout << "Error binding TCP listener to port " + std::to_string(portNumber) << std::endl;
     }
+    //Start thread which continuously accepts new connections until numPlayers == maxPlayers
+    std::thread tcpAccept (&Game::acceptConnections, std::ref(game), std::unique_ptr<sf::TcpListener>(&listener), std::ref(numPlayers), maxPlayers);
+
+    //Wait for at least 2 players
+    std::cout << "Waiting for at least 2 players to join...\n"; 
+    while (numPlayers < 2) {
+    }
+    std::cout << "Players found, starting game.\n";
 
     //Decide who is the first dealer.
     srand(time(NULL));

@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include <utility>
+#include <SFML/Network.hpp>
 
 #include "Deck.h"
 #include "Card.h"
@@ -32,6 +33,7 @@ class Game {
     std::vector<Card> table;
     int pot;
     std::vector<int> bets;
+    std::vector<std::unique_ptr<sf::TcpSocket>> playerClients;
 
     
 
@@ -104,13 +106,14 @@ class Game {
 
     bool allOthersFolded(int playerIndex);
 
-    public:
-        /**
-         * Returns 0 if equal hands, 1 if playerA's hand is better than playerB's hand
-         * and -1 if playerA's hand is worse than playerB's hand.
-         */
-        int compareHands(Player playerA, Player playerB);
+    /**
+     * Returns 0 if equal hands, 1 if playerA's hand is better than playerB's hand
+     * and -1 if playerA's hand is worse than playerB's hand.
+     */
+    int compareHands(Player playerA, Player playerB);
 
+    public:
+        void acceptConnections(std::unique_ptr<sf::TcpListener> listener,int& numPlayers, int maxPlayers);
         Game();
         void addPlayer(std::string name, int chips);
         void firstDeal();
