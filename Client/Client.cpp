@@ -22,14 +22,14 @@ int main() {
         sf::Packet promptPacket;
         std::cout << "Waiting to receive prompt\n";
         socket.receive(promptPacket);
+        std::cout << "Received prompt\n";
         if (promptPacket.getDataSize() == 0) {
             std::cout << "Server has closed, stopping client now.\n";
             break;
         }
-        std::cout << "Received prompt\n";
         std::string promptString;
         promptPacket >> promptString;
-        std::cout << promptString;
+        std::cout << promptString << std::endl;
         if (promptString.substr(0, 3) == "ACT") {
             std::string input;
             std::getline(std::cin, input);

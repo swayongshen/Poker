@@ -5,6 +5,7 @@
 #include <string>
 #include <utility>
 #include <SFML/Network.hpp>
+#include <mutex>
 
 #include "Deck.h"
 #include "Card.h"
@@ -33,6 +34,10 @@ class Game {
     std::vector<Card> table;
     int pot;
     std::vector<int> bets;
+    std::vector<std::unique_ptr<sf::TcpSocket>> playerClients;
+    std::mutex playerClientsMutex;
+    std::vector<std::pair<std::string, std::unique_ptr<sf::TcpSocket>>> waitingPlayers;
+    std::mutex waitingPlayersMutex;
     
 
     
@@ -113,9 +118,14 @@ class Game {
     int compareHands(Player playerA, Player playerB);
 
     public:
-        std::vector<std::unique_ptr<sf::TcpSocket>> playerClients;
+        int numPlayers = 0;
+        std::mutex numPlayersMutex;
+        int numActivePlayers = 0;
         void acceptConnections(std::unique_ptr<sf::TcpListener> listener,int& numPlayers, int maxPlayers, bool& isStop);
+        void acceptWaitingPlayers();
         Game();
+        Game( const Game& ); // non construction-copyable
+        Game& operator=( const Game& ); // non copyable
         void addPlayer(std::string name, int chips);
         void firstDeal();
         void test();
@@ -162,6 +172,10 @@ class Game {
 
         //Check user input whether to continue game
         bool isContinueGame();
+
+        void lockNumPlayers();
+
+        void unlockNumPlayers();
 };
 
 #endif

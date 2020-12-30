@@ -8,6 +8,7 @@
 #include <limits>
 #include <SFML/Network.hpp>
 #include <SFML/Network/Packet.hpp>
+#include <mutex>
 
 #include "Game.h"
 #include "Card.h"
@@ -400,8 +401,8 @@ int Game::act(int playerIndex) {
         } else {
             promptString += "Enter C to call the current highest bet of: $" + std::to_string(currBet) + ",\n";      
         }
-        promptString += "Enter R X to raise/make a higher bet by $X e.g. R 40\n"; 
-        promptString += "Enter F to fold your hand,\n";
+        promptString += "Enter R X to raise/make a higher bet by $X e.g. R 40,\n"; 
+        promptString += "Enter F to fold your hand\n";
         sf::Packet promptPacket;
         promptPacket << promptString;
         sf::TcpSocket& playerSocket = *playerClients[playerIndex];
@@ -473,25 +474,44 @@ bool Game::allOthersFolded(int playerIndex) {
 void Game::acceptConnections(std::unique_ptr<sf::TcpListener> listenerPtr, int& numPlayers, int maxPlayers, bool& isStop) {
     try {
         while (numPlayers < maxPlayers && !isStop) {
+            std::cout << "Thread working\n";
             // accept a new connection
-            sf::TcpSocket client;
             sf::TcpListener& listener = *listenerPtr;
+            std::unique_ptr<sf::TcpSocket> clientPtr = std::make_unique<sf::TcpSocket>();
+            sf::TcpSocket& client = *clientPtr;
             if (listener.accept(client) != sf::Socket::Done) {
                 std::cout << "Error accepting new connection\n";
             } else {
-                playerClients.push_back(std::unique_ptr<sf::TcpSocket>(&client));
                 sf::Packet packet;
                 client.receive(packet);
                 std::string playerName;
                 packet >> playerName;
-                addPlayer(playerName, 500);
+                waitingPlayersMutex.lock();
+                waitingPlayers.push_back(std::make_pair(playerName, std::move(clientPtr)));
+                waitingPlayersMutex.unlock();
                 std::cout << playerName + " has joined the game.\n";
+                numPlayersMutex.lock();
                 numPlayers += 1;
+                numPlayersMutex.unlock();
+                
             }
         }
+        std::cout << "Thread stopped\n";
     } catch (...) {
         std::cout << "Thread error!\n";
     }
+}
+
+void Game::acceptWaitingPlayers() {
+    waitingPlayersMutex.lock();
+    playerClientsMutex.lock();
+    for (int i = 0; i < waitingPlayers.size(); i++) {
+        addPlayer(waitingPlayers[i].first, 500);
+        playerClients.push_back(std::move(waitingPlayers[i].second));
+    }
+    waitingPlayers = std::vector<std::pair<std::string, std::unique_ptr<sf::TcpSocket>>>();
+    waitingPlayersMutex.unlock();
+    playerClientsMutex.unlock();
 }
 
 Game::Game() {
@@ -501,6 +521,7 @@ Game::Game() {
     this->pot = 0;
     this->bets = std::vector<int>();
     this->playerClients = std::vector<std::unique_ptr<sf::TcpSocket>>();
+    this->waitingPlayers = std::vector<std::pair<std::string, std::unique_ptr<sf::TcpSocket>>>();
 }
 
 
@@ -535,10 +556,10 @@ void Game::rotatePlayersLeft(int d) {
     /* To handle if d >= n */
     d = d % n; 
     int g_c_d = std::__gcd(d, n); 
+    playerClientsMutex.lock();
     for (int i = 0; i < g_c_d; i++) { 
         /* move i-th values of blocks */
         Player temp = players[i];
-        std::cout << "Wut";
         std::unique_ptr<sf::TcpSocket>& temp2 = playerClients[i];
         int j = i;
   
@@ -551,16 +572,15 @@ void Game::rotatePlayersLeft(int d) {
                 break; 
   
             players[j] = players[k];
-            std::cout << "nt reach\n";
             playerClients[j].swap(playerClients[k]);
             
             j = k; 
         }
-        std::cout << "Reach\n";
         players[j] = temp;
         playerClients[j].swap(temp2);
 
     } 
+    playerClientsMutex.unlock();
 }
 
 void Game::bet(int playerIndex, int amt) {
@@ -584,11 +604,13 @@ void Game::bet(int playerIndex, int amt) {
 
 void Game::broadcastMsg(std::string msg) {
     std::cout << "before broadcast\n";
-    for (std::unique_ptr<sf::TcpSocket>& clientPtr : playerClients) {
-        sf::TcpSocket& clientSocket = *clientPtr;
+    for (int i = 0; i < players.size(); i++) {
+        std::cout << "Sending msg to player at index " + std::to_string(i) << std::endl;
+        sf::TcpSocket& currClient = *playerClients[i];
         sf::Packet sendPacket;
         sendPacket << msg;
-        std::cout << clientSocket.send(sendPacket);
+        std::cout << "Packet size: " + std::to_string(sendPacket.getDataSize()) << std::endl;
+        currClient.send(sendPacket);
     }
     std::cout << "success broadcast \n";
 }
@@ -841,4 +863,12 @@ bool Game::isContinueGame() {
     }
     //Won't reach
     return false;
+}
+
+void Game::lockNumPlayers() {
+    numPlayersMutex.lock();
+}
+
+void Game::unlockNumPlayers() {
+    numPlayersMutex.unlock();
 }

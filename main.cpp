@@ -6,14 +6,21 @@
 #include <limits>
 #include <thread>
 #include <SFML/Network.hpp>
+#include <signal.h>
 
 #include "Game.h"
 
+bool isStop = false;
+
+void stopThread(int s) {
+    isStop = true;
+}
 /**
  * Game follows instructions from 
  * https://www.instructables.com/Learn-To-Play-Poker---Texas-Hold-Em-aka-Texas-Ho/
  */
 int main() {
+    signal(SIGINT, stopThread);
     /**
      * Configuration of game: max number of players, small blind amt
      */
@@ -57,7 +64,7 @@ int main() {
     sf::TcpListener listener;
     int portNumber = 53000;
     //flag to make thread stop
-    bool isStop = false;
+    
     try {
         // bind the listener to a port
         if (listener.listen(portNumber) != sf::Socket::Done)
@@ -65,43 +72,33 @@ int main() {
             std::cout << "Error binding TCP listener to port " + std::to_string(portNumber) << std::endl;
         }
         //Start thread which continuously accepts new connections until numPlayers == maxPlayer
-        //std::thread tcpAccept (&Game::acceptConnections, std::ref(game), std::unique_ptr<sf::TcpListener>(&listener), std::ref(numPlayers), maxPlayers, std::ref(isStop));
+        std::thread tcpAccept (&Game::acceptConnections, std::ref(game), std::unique_ptr<sf::TcpListener>(&listener), std::ref(numPlayers), maxPlayers, std::ref(isStop));
 
         //Wait for at least 2 players
         std::cout << "Waiting for at least 2 players to join...\n"; 
-        while (numPlayers < 1) {
-            std::cout << "waiting for " + std::to_string(2 - numPlayers) + " more players.\n";
-            sf::TcpSocket client;
-            if (listener.accept(client) != sf::Socket::Done) {
-                std::cout << "Error accepting new connection\n";
-            } else {
-                game.playerClients.push_back(std::unique_ptr<sf::TcpSocket>(&client));
-                sf::Packet packet;
-                client.receive(packet);
-                std::string playerName;
-                packet >> playerName;
-                game.addPlayer(playerName, 500);
-                std::cout << playerName + " has joined the game.\n";
-                numPlayers += 1;
-            }
+        while (numPlayers < 2) {
         }
         std::cout << "Players found, starting game.\n";
 
+        game.lockNumPlayers();
+        int numActivePlayers = numPlayers;
+        game.acceptWaitingPlayers();
+        game.unlockNumPlayers();
+
+        std::cout << "Pass1\n";
         //Decide who is the first dealer.
         srand(time(NULL));
-        int dealerPosition = rand() % numPlayers;
-        std::cout << "Player at index " + std::to_string(dealerPosition) + " has been chosen randomly to be the first dealer. \n\n"; 
-        
+        std::cout << "Pass2 \n";
+        int dealerPosition = rand() % numActivePlayers;
+        std::cout << "Pass3 \n";
+        std::cout << "Player at index " + std::to_string(dealerPosition) + " has been chosen randomly to be the first dealer.\n\n";
 
-        std::cout << "before rotate \n";
         //Rotate the players vector to make dealer the first player in vector.
         game.rotatePlayersLeft(dealerPosition);
         
-
-        std::cout << "after rotate\n";
         //Reshuffle after using cards to decide who to be dealer
         game.restartDeck();
-        std::cout << "after restart deck\n";
+
         while (true) {
             game.printStatus("NEW GAME");
 
