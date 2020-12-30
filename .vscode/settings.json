@@ -48,7 +48,11 @@
         "typeinfo": "cpp",
         "ctime": "cpp",
         "sstream": "cpp",
-        "map": "cpp"
+        "map": "cpp",
+        "chrono": "cpp",
+        "ratio": "cpp",
+        "stop_token": "cpp",
+        "thread": "cpp"
     },
     "C_Cpp.default.intelliSenseMode": "gcc-x64"
 }

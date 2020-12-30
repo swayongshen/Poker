@@ -15,7 +15,7 @@
  */
 int main() {
     /**
-     * Configuration of game
+     * Configuration of game: max number of players, small blind amt
      */
 
     //Get max number of players
@@ -56,105 +56,129 @@ int main() {
     int numPlayers;
     sf::TcpListener listener;
     int portNumber = 53000;
-    // bind the listener to a port
-    if (listener.listen(portNumber) != sf::Socket::Done)
-    {
-        std::cout << "Error binding TCP listener to port " + std::to_string(portNumber) << std::endl;
-    }
-    //Start thread which continuously accepts new connections until numPlayers == maxPlayers
-    std::thread tcpAccept (&Game::acceptConnections, std::ref(game), std::unique_ptr<sf::TcpListener>(&listener), std::ref(numPlayers), maxPlayers);
+    //flag to make thread stop
+    bool isStop = false;
+    try {
+        // bind the listener to a port
+        if (listener.listen(portNumber) != sf::Socket::Done)
+        {
+            std::cout << "Error binding TCP listener to port " + std::to_string(portNumber) << std::endl;
+        }
+        //Start thread which continuously accepts new connections until numPlayers == maxPlayer
+        //std::thread tcpAccept (&Game::acceptConnections, std::ref(game), std::unique_ptr<sf::TcpListener>(&listener), std::ref(numPlayers), maxPlayers, std::ref(isStop));
 
-    //Wait for at least 2 players
-    std::cout << "Waiting for at least 2 players to join...\n"; 
-    while (numPlayers < 2) {
-    }
-    std::cout << "Players found, starting game.\n";
+        //Wait for at least 2 players
+        std::cout << "Waiting for at least 2 players to join...\n"; 
+        while (numPlayers < 1) {
+            std::cout << "waiting for " + std::to_string(2 - numPlayers) + " more players.\n";
+            sf::TcpSocket client;
+            if (listener.accept(client) != sf::Socket::Done) {
+                std::cout << "Error accepting new connection\n";
+            } else {
+                game.playerClients.push_back(std::unique_ptr<sf::TcpSocket>(&client));
+                sf::Packet packet;
+                client.receive(packet);
+                std::string playerName;
+                packet >> playerName;
+                game.addPlayer(playerName, 500);
+                std::cout << playerName + " has joined the game.\n";
+                numPlayers += 1;
+            }
+        }
+        std::cout << "Players found, starting game.\n";
 
-    //Decide who is the first dealer.
-    srand(time(NULL));
-    int dealerPosition = rand() % numPlayers;
+        //Decide who is the first dealer.
+        srand(time(NULL));
+        int dealerPosition = rand() % numPlayers;
+        std::cout << "Player at index " + std::to_string(dealerPosition) + " has been chosen randomly to be the first dealer. \n\n"; 
+        
 
-    std::cout << "Player " + std::to_string(dealerPosition) + " has been chosen randomly to be the first dealer. \n\n"; 
+        std::cout << "before rotate \n";
+        //Rotate the players vector to make dealer the first player in vector.
+        game.rotatePlayersLeft(dealerPosition);
+        
 
-    //Rotate the players vector to make dealer the first player in vector.
-    game.rotatePlayersLeft(dealerPosition);
+        std::cout << "after rotate\n";
+        //Reshuffle after using cards to decide who to be dealer
+        game.restartDeck();
+        std::cout << "after restart deck\n";
+        while (true) {
+            game.printStatus("NEW GAME");
 
-    //Reshuffle after using cards to decide who to be dealer
-    game.restartDeck();
+            //Small blind, big blind added to pot. 
+            game.blindsBid(smallBlindAmt);
 
-    while (true) {
-        game.printStatus("NEW GAME");
+            /**
+             * Pre-flop
+             */
+            //Deal pocket cards
+            game.firstDeal();
+            //Each player after the big blind starting from the under the gun starts their preflop action
+            game.printStatus("PRE-FLOP");
+            game.preFlopRound();
+            if (game.hasWinner() != -1) {
+                game.awardWinnersAndRotatePlayers();
+                if (game.isContinueGame()) {
+                    continue;
+                } else {
+                    break;
+                }
+            }
 
-        //Small blind, big blind added to pot. 
-        game.blindsBid(smallBlindAmt);
+            /**
+             * Flop
+             */
+            //Burns 1 card and draws 3 card before flop
+            game.dealFlop();
+            //Round 2 betting after flop, starting from small blind after dealer.
+            game.printStatus("FLOP");
+            game.displayTable();
+            game.round(0, true);
+            if (game.hasWinner() != -1) {
+                game.awardWinnersAndRotatePlayers();
+                if (game.isContinueGame()) {
+                    continue;
+                } else {
+                    break;
+                }
+            }
 
-        /**
-         * Pre-flop
-         */
-        //Deal pocket cards
-        game.firstDeal();
-        //Each player after the big blind starting from the under the gun starts their preflop action
-        game.printStatus("PRE-FLOP");
-        game.preFlopRound();
-        if (game.hasWinner() != -1) {
+            /**
+             * Turn
+             */
+            //Burns another card and deal 1 card for the turn
+            game.dealTurnOrRiver();
+            game.printStatus("TURN");
+            game.displayTable();
+            game.round(0, true);
+            if (game.hasWinner() != -1) {
+                game.awardWinnersAndRotatePlayers();
+                if (game.isContinueGame()) {
+                    continue;
+                } else {
+                    break;
+                }
+            }
+
+            /**
+             * River
+             */
+            //Burns a card and deal 1 card for the river.
+            game.dealTurnOrRiver();
+            game.printStatus("RIVER");
+            game.displayTable();
+            game.round(0, true);
+            //At this point, winner has to be determined.
             game.awardWinnersAndRotatePlayers();
             if (game.isContinueGame()) {
                 continue;
             } else {
                 break;
             }
-        }
 
-        /**
-         * Flop
-         */
-        //Burns 1 card and draws 3 card before flop
-        game.dealFlop();
-        //Round 2 betting after flop, starting from small blind after dealer.
-        game.printStatus("FLOP");
-        game.displayTable();
-        game.round(0, true);
-        if (game.hasWinner() != -1) {
-            game.awardWinnersAndRotatePlayers();
-            if (game.isContinueGame()) {
-                continue;
-            } else {
-                break;
-            }
         }
-
-        /**
-         * Turn
-         */
-        //Burns another card and deal 1 card for the turn
-        game.dealTurnOrRiver();
-        game.printStatus("TURN");
-        game.displayTable();
-        game.round(0, true);
-        if (game.hasWinner() != -1) {
-            game.awardWinnersAndRotatePlayers();
-            if (game.isContinueGame()) {
-                continue;
-            } else {
-                break;
-            }
-        }
-
-        /**
-         * River
-         */
-        //Burns a card and deal 1 card for the river.
-        game.dealTurnOrRiver();
-        game.printStatus("RIVER");
-        game.displayTable();
-        game.round(0, true);
-        //At this point, winner has to be determined.
-        game.awardWinnersAndRotatePlayers();
-        if (game.isContinueGame()) {
-            continue;
-        } else {
-            break;
-        }
-
+    } catch (...) {
+        isStop = true;
+        listener.close();
     }
 }

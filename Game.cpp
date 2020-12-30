@@ -393,45 +393,65 @@ int Game::act(int playerIndex) {
     displayTableAndHand(playerIndex);
 
     while (true) {
-        std::string input;
-        std::cout << "*****************************\n";
+        std::string promptString = "ACT\n";
+        promptString += "*****************************\n";
         if (currBet == bets[playerIndex]) {
-            std::cout << "Enter K to check your current bet of: $" + std::to_string(currBet) + "," << std::endl;
+            promptString += "Enter K to check your current bet of: $" + std::to_string(currBet) + ",\n";
         } else {
-            std::cout << "Enter C to call the current highest bet of: $" + std::to_string(currBet) + ","<< std::endl;
-            
+            promptString += "Enter C to call the current highest bet of: $" + std::to_string(currBet) + ",\n";      
         }
-        std::cout << "Enter R X to raise/make a higher bet by $X e.g. R 40" << std::endl;
-        std::cout << "Enter F to fold your hand," << std::endl;
+        promptString += "Enter R X to raise/make a higher bet by $X e.g. R 40\n"; 
+        promptString += "Enter F to fold your hand,\n";
+        sf::Packet promptPacket;
+        promptPacket << promptString;
+        sf::TcpSocket& playerSocket = *playerClients[playerIndex];
+        playerSocket.send(promptPacket);
         
-
-        std::getline(std::cin, input);
+        //Wait 20 seconds for input, if no input, fold.
+        sf::SocketSelector selector;
+        selector.add(playerSocket);
+        
+        std::string input;
+        if (selector.wait(sf::seconds(20.0))) {
+            if (selector.isReady(playerSocket)) {
+                sf::Packet receivePacket;
+                playerSocket.receive(receivePacket);
+                receivePacket >> input;
+            }
+        } else {
+            input = "F";
+        }
+        
         //Calling
         if (input == "C" || input == "c" && currBet > bets[playerIndex]) {
-                std::cout << players[playerIndex].name + " calls.\n";
+                broadcastMsg(players[playerIndex].name + " calls.\n");
                 bet(playerIndex, (currBet - bets[playerIndex]));
                 return 0;
         //Folding
         } else if (input == "F" || input == "f") {
-            std::cout << players[playerIndex].name + " folds.\n";
+            broadcastMsg(players[playerIndex].name + " folds.\n");
             bets[playerIndex] = -1;
             return -1;
         //Raising
         } else if (input.length() > 1 && split(input, ' ')[0] == "R" || split(input, ' ')[0] == "r") {
             int raiseAmt = std::stoi(split(input, ' ')[1]);
             if (players[playerIndex].getChipAmt() >= currBet - bets[playerIndex]+ raiseAmt) {
-                std::cout << players[playerIndex].name + " raises the bid by $" + std::to_string(raiseAmt) 
-                    + " to $" + std::to_string(currBet + raiseAmt) << std::endl;
+                broadcastMsg(players[playerIndex].name + " raises the bid by $" + std::to_string(raiseAmt) 
+                    + " to $" + std::to_string(currBet + raiseAmt) + "\n");
                 bet(playerIndex, (currBet + raiseAmt) - bets[playerIndex]);
                 return 1;
             } else {
-                std::cout << "You do not have enough chips.\n";
+                sf::Packet notEnoughChips;
+                notEnoughChips << "You do not have enough chips.\n";
+                playerSocket.send(notEnoughChips);
             }
         } else if (input == "K" || input == "k" && currBet == bets[playerIndex]) {
-            std::cout << players[playerIndex].name + " checks.\n";
+            broadcastMsg(players[playerIndex].name + " checks.\n");
             return 0;
         } else {
-            std::cout << "Invalid input, please try again.\n";
+            sf::Packet invalidInput;
+            invalidInput << "Invalid input, please try again.\n";
+            playerSocket.send(invalidInput);
         }
     }  
 }
@@ -450,23 +470,27 @@ bool Game::allOthersFolded(int playerIndex) {
  * Public methods
  * -----------------------------------------------
  */
-void Game::acceptConnections(std::unique_ptr<sf::TcpListener> listenerPtr, int& numPlayers, int maxPlayers) {
-    while (numPlayers < maxPlayers) {
-        // accept a new connection
-        sf::TcpSocket client;
-        sf::TcpListener& listener = *listenerPtr;
-        if (listener.accept(client) != sf::Socket::Done) {
-            std::cout << "Error accepting new connection\n";
-        } else {
-            playerClients.push_back(std::unique_ptr<sf::TcpSocket>(&client));
-            sf::Packet packet;
-            client.receive(packet);
-            std::string playerName;
-            packet >> playerName;
-            addPlayer(playerName, 500);
-            std::cout << playerName + " has joined the game.\n";
-            numPlayers += 1;
+void Game::acceptConnections(std::unique_ptr<sf::TcpListener> listenerPtr, int& numPlayers, int maxPlayers, bool& isStop) {
+    try {
+        while (numPlayers < maxPlayers && !isStop) {
+            // accept a new connection
+            sf::TcpSocket client;
+            sf::TcpListener& listener = *listenerPtr;
+            if (listener.accept(client) != sf::Socket::Done) {
+                std::cout << "Error accepting new connection\n";
+            } else {
+                playerClients.push_back(std::unique_ptr<sf::TcpSocket>(&client));
+                sf::Packet packet;
+                client.receive(packet);
+                std::string playerName;
+                packet >> playerName;
+                addPlayer(playerName, 500);
+                std::cout << playerName + " has joined the game.\n";
+                numPlayers += 1;
+            }
         }
+    } catch (...) {
+        std::cout << "Thread error!\n";
     }
 }
 
@@ -514,8 +538,9 @@ void Game::rotatePlayersLeft(int d) {
     for (int i = 0; i < g_c_d; i++) { 
         /* move i-th values of blocks */
         Player temp = players[i];
+        std::cout << "Wut";
         std::unique_ptr<sf::TcpSocket>& temp2 = playerClients[i];
-        int j = i; 
+        int j = i;
   
         while (1) { 
             int k = j + d; 
@@ -526,10 +551,12 @@ void Game::rotatePlayersLeft(int d) {
                 break; 
   
             players[j] = players[k];
+            std::cout << "nt reach\n";
             playerClients[j].swap(playerClients[k]);
             
             j = k; 
-        } 
+        }
+        std::cout << "Reach\n";
         players[j] = temp;
         playerClients[j].swap(temp2);
 
@@ -555,39 +582,54 @@ void Game::bet(int playerIndex, int amt) {
     }
 }
 
+void Game::broadcastMsg(std::string msg) {
+    std::cout << "before broadcast\n";
+    for (std::unique_ptr<sf::TcpSocket>& clientPtr : playerClients) {
+        sf::TcpSocket& clientSocket = *clientPtr;
+        sf::Packet sendPacket;
+        sendPacket << msg;
+        std::cout << clientSocket.send(sendPacket);
+    }
+    std::cout << "success broadcast \n";
+}
 
 void Game::displayTable() {
-    std::cout << "------------------------------\n"; 
-    std::cout << "Table:" << std::endl;
+    std::string output;
+    output += "------------------------------\n"; 
+    output += "Table:\n" ;
     
     //Print all cards on table if any.
     for (Card card : table) {
-        std::cout << card << " ";
+        output << card;
     }
     
-    std::cout << "\n\n";
-    std::cout << "Pot: $" + std::to_string(pot) << std::endl;
-    std::cout << "------------------------------\n\n";
+    output += "\n\n";
+    output += "Pot: $" + std::to_string(pot) + "\n";
+    output += "------------------------------\n\n";
+
+    broadcastMsg(output);
 }
 
 void Game::displayTableAndHand(int playerIndex) {
     displayTable();
-    std::cout << "*" + players[playerIndex].getName() << " your turn to act!*" << std::endl;
+    std::string output;
+    output += "*" + players[playerIndex].getName() + " your turn to act!*\n"; 
     std::vector<Card> hand = players[playerIndex].getHand();
     for (Card card : hand) {
-        std::cout << card;
+        output << card;
     }
-    std::cout << std::endl;
-    std::cout << "Your chips: $" + std::to_string(players[playerIndex].getChipAmt()) << std::endl;
-    std::cout << "Your current bet: $" + std::to_string(bets[playerIndex]) << std::endl;
-    std::cout << std::endl;
+    output += "\nYour chips: $" + std::to_string(players[playerIndex].getChipAmt()) + "\n";
+    output += "Your current bet: $" + std::to_string(bets[playerIndex]) + "\n\n";
+    broadcastMsg(output);
 }
 
 void Game::printStatus(std::string status) {
-    std::cout << "/****************************\\" << std::endl;
-    std::cout << std::string((30 - status.size())/2, ' ');
-    std::cout << status << std::endl;
-    std::cout << "\\****************************/" << std::endl;
+    std::string output;
+    output += "/****************************\\\n";
+    output += std::string((30 - status.size())/2, ' ');
+    output += status += "\n";
+    output += "\\****************************/\n";
+    broadcastMsg(output);
 }
 
 int Game::round(int playerIndex, bool isFullRound) {
@@ -655,17 +697,19 @@ int Game::hasWinner() {
 
 void Game::displayTableAndAllUnfoldHands() {
     displayTable();
+    std::string output;
     for (int i = 0; i < players.size(); i++) {
         if (bets[i] != -1) {
-            std::cout << players[i].getName() + ":" << std::endl;
+            output += players[i].getName() + ": ";
             std::vector<Card> hand = players[i].getHand();
             for (Card card : hand) {
-                std::cout << card;
+                output << card;
             }
         }
-        std::cout << std::endl;
+        output += "\n";
     }
-    std::cout << std::endl;
+    output += "\n";
+    broadcastMsg(output);
 }
 
 void Game::awardWinnersAndRotatePlayers() {

@@ -18,6 +18,7 @@ class Card {
         Card(Suit suit, int rank);
 
         friend std::ostream& operator << (std::ostream& output, Card& card);
+        friend std::string& operator << (std::string& output, Card& card);
 };
 
 #endif

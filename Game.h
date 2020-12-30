@@ -33,7 +33,7 @@ class Game {
     std::vector<Card> table;
     int pot;
     std::vector<int> bets;
-    std::vector<std::unique_ptr<sf::TcpSocket>> playerClients;
+    
 
     
 
@@ -113,7 +113,8 @@ class Game {
     int compareHands(Player playerA, Player playerB);
 
     public:
-        void acceptConnections(std::unique_ptr<sf::TcpListener> listener,int& numPlayers, int maxPlayers);
+        std::vector<std::unique_ptr<sf::TcpSocket>> playerClients;
+        void acceptConnections(std::unique_ptr<sf::TcpListener> listener,int& numPlayers, int maxPlayers, bool& isStop);
         Game();
         void addPlayer(std::string name, int chips);
         void firstDeal();
@@ -125,10 +126,12 @@ class Game {
         //Rotates the players vector left by d places. 
         void rotatePlayersLeft(int d);
         void bet(int playerIndex, int amt);
+        void broadcastMsg(std::string msg);
         void displayTable();
         void displayTableAndHand(int playerIndex);
         void displayTableAndAllUnfoldHands();
         void printStatus(std::string status);
+        
 
         /**
          * playerIndex takes in the vector index of the player who raised the bet.
