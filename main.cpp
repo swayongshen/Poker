@@ -20,6 +20,8 @@ void stopThread(int s) {
  * https://www.instructables.com/Learn-To-Play-Poker---Texas-Hold-Em-aka-Texas-Ho/
  */
 int main() {
+
+    //If CTRL + C pressed, stop thread
     signal(SIGINT, stopThread);
     /**
      * Configuration of game: max number of players, small blind amt
@@ -60,7 +62,6 @@ int main() {
     /**
      * Networking
      */
-    int numPlayers;
     sf::TcpListener listener;
     int portNumber = 53000;
     //flag to make thread stop
@@ -72,25 +73,20 @@ int main() {
             std::cout << "Error binding TCP listener to port " + std::to_string(portNumber) << std::endl;
         }
         //Start thread which continuously accepts new connections until numPlayers == maxPlayer
-        std::thread tcpAccept (&Game::acceptConnections, std::ref(game), std::unique_ptr<sf::TcpListener>(&listener), std::ref(numPlayers), maxPlayers, std::ref(isStop));
+        std::thread tcpAccept (&Game::acceptConnections, std::ref(game), std::unique_ptr<sf::TcpListener>(&listener), maxPlayers, std::ref(isStop));
 
         //Wait for at least 2 players
         std::cout << "Waiting for at least 2 players to join...\n"; 
-        while (numPlayers < 2) {
+        while (game.numPlayers < 2) {
         }
         std::cout << "Players found, starting game.\n";
 
-        game.lockNumPlayers();
-        int numActivePlayers = numPlayers;
+        game.numActivePlayers = game.numPlayers;
         game.acceptWaitingPlayers();
-        game.unlockNumPlayers();
 
-        std::cout << "Pass1\n";
         //Decide who is the first dealer.
         srand(time(NULL));
-        std::cout << "Pass2 \n";
-        int dealerPosition = rand() % numActivePlayers;
-        std::cout << "Pass3 \n";
+        int dealerPosition = rand() % game.numActivePlayers;
         std::cout << "Player at index " + std::to_string(dealerPosition) + " has been chosen randomly to be the first dealer.\n\n";
 
         //Rotate the players vector to make dealer the first player in vector.
@@ -99,7 +95,18 @@ int main() {
         //Reshuffle after using cards to decide who to be dealer
         game.restartDeck();
 
+        /**
+         * Game processes
+         */
+        int round = 0;
         while (true) {
+            if (round != 0) {
+                game.checkConnectedAll();
+                while (game.numActivePlayers < 2) {
+                    game.checkConnectedAll();
+                }
+            }
+            round++;
             game.printStatus("NEW GAME");
 
             //Small blind, big blind added to pot. 
@@ -115,11 +122,6 @@ int main() {
             game.preFlopRound();
             if (game.hasWinner() != -1) {
                 game.awardWinnersAndRotatePlayers();
-                if (game.isContinueGame()) {
-                    continue;
-                } else {
-                    break;
-                }
             }
 
             /**
@@ -129,15 +131,10 @@ int main() {
             game.dealFlop();
             //Round 2 betting after flop, starting from small blind after dealer.
             game.printStatus("FLOP");
-            game.displayTable();
+            game.displayTableAndHand();
             game.round(0, true);
             if (game.hasWinner() != -1) {
                 game.awardWinnersAndRotatePlayers();
-                if (game.isContinueGame()) {
-                    continue;
-                } else {
-                    break;
-                }
             }
 
             /**
@@ -146,15 +143,10 @@ int main() {
             //Burns another card and deal 1 card for the turn
             game.dealTurnOrRiver();
             game.printStatus("TURN");
-            game.displayTable();
+            game.displayTableAndHand();
             game.round(0, true);
             if (game.hasWinner() != -1) {
                 game.awardWinnersAndRotatePlayers();
-                if (game.isContinueGame()) {
-                    continue;
-                } else {
-                    break;
-                }
             }
 
             /**
@@ -163,16 +155,10 @@ int main() {
             //Burns a card and deal 1 card for the river.
             game.dealTurnOrRiver();
             game.printStatus("RIVER");
-            game.displayTable();
+            game.displayTableAndHand();
             game.round(0, true);
             //At this point, winner has to be determined.
             game.awardWinnersAndRotatePlayers();
-            if (game.isContinueGame()) {
-                continue;
-            } else {
-                break;
-            }
-
         }
     } catch (...) {
         isStop = true;

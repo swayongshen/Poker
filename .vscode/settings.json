@@ -52,7 +52,9 @@
         "chrono": "cpp",
         "ratio": "cpp",
         "stop_token": "cpp",
-        "thread": "cpp"
+        "thread": "cpp",
+        "condition_variable": "cpp",
+        "mutex": "cpp"
     },
     "C_Cpp.default.intelliSenseMode": "gcc-x64"
 }

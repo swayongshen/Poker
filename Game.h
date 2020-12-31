@@ -117,11 +117,17 @@ class Game {
      */
     int compareHands(Player playerA, Player playerB);
 
+    //Helper methods to send/receive message to client
+    void sendMsg(int clientIndex, std::string msg);
+    void sendMsg(sf::TcpSocket& clientSocket, std::string msg);
+    sf::Packet receiveMsg(sf::TcpSocket& clientSocket);
+    sf::Packet receiveMsg(int clientIndex);
+
     public:
         int numPlayers = 0;
         std::mutex numPlayersMutex;
         int numActivePlayers = 0;
-        void acceptConnections(std::unique_ptr<sf::TcpListener> listener,int& numPlayers, int maxPlayers, bool& isStop);
+        void acceptConnections(std::unique_ptr<sf::TcpListener> listener, int maxPlayers, bool& isStop);
         void acceptWaitingPlayers();
         Game();
         Game( const Game& ); // non construction-copyable
@@ -138,7 +144,7 @@ class Game {
         void bet(int playerIndex, int amt);
         void broadcastMsg(std::string msg);
         void displayTable();
-        void displayTableAndHand(int playerIndex);
+        void displayTableAndHand();
         void displayTableAndAllUnfoldHands();
         void printStatus(std::string status);
         
@@ -170,12 +176,12 @@ class Game {
         //Decides who won and awards the player(s) and rotate the table clockwise by 1 position.
         void awardWinnersAndRotatePlayers();
 
-        //Check user input whether to continue game
-        bool isContinueGame();
-
+        //Mutex locks to ensure thread safety
         void lockNumPlayers();
-
         void unlockNumPlayers();
+        void checkConnectedAll();
+
+        
 };
 
 #endif
