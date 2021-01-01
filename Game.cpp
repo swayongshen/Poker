@@ -6,6 +6,7 @@
 #include <iostream>
 #include <sstream>
 #include <limits>
+#include <atomic>
 #include <SFML/Network.hpp>
 #include <SFML/Network/Packet.hpp>
 #include <mutex>
@@ -493,12 +494,12 @@ sf::Packet Game::receiveMsg(int clientIndex) {
  * Public methods
  * -----------------------------------------------
  */
-void Game::acceptConnections(std::unique_ptr<sf::TcpListener> listenerPtr, int maxPlayers, bool& isStop) {
+void Game::acceptConnections(std::unique_ptr<sf::TcpListener> listenerPtr, int maxPlayers, std::atomic<bool>& isStop) {
     try {
         std::cout << "Thread started\n";
+        sf::TcpListener& listener = *listenerPtr;
         while (numPlayers < maxPlayers && !isStop) {
             // accept a new connection
-            sf::TcpListener& listener = *listenerPtr;
             std::unique_ptr<sf::TcpSocket> clientPtr = std::make_unique<sf::TcpSocket>();
             sf::TcpSocket& client = *clientPtr;
             if (listener.accept(client) != sf::Socket::Done) {
@@ -516,6 +517,7 @@ void Game::acceptConnections(std::unique_ptr<sf::TcpListener> listenerPtr, int m
                 
             }
         }
+        listener.close();
         std::cout << "Thread stopped\n";
     } catch (...) {
         std::cout << "Thread error!\n";
@@ -857,6 +859,7 @@ void Game::awardWinnersAndRotatePlayers() {
     restartDeck();
     this->table = std::vector<Card>();
     printStatus("GAME ENDED");
+    broadcastMsg("END");
 }
 
 void Game::lockNumPlayers() {
@@ -869,36 +872,27 @@ void Game::unlockNumPlayers() {
 
 void Game::checkConnectedAll() {
     acceptWaitingPlayers();
-    int newNumPlayers = 0;
     playerClientsMutex.lock();
-    std::vector<std::unique_ptr<sf::TcpSocket>>& currPlayerClients = playerClients;
-    playerClients = std::vector<std::unique_ptr<sf::TcpSocket>>();
-    std::vector<Player> newPlayers;
     for (int playerIndex = 0; playerIndex < players.size(); playerIndex++) {
-        sf::TcpSocket& clientSocket = *currPlayerClients[playerIndex];
-        sendMsg(clientSocket, "END");
+        sf::TcpSocket& clientSocket = *playerClients[playerIndex];
+        sendMsg(clientSocket, "CHECK");
         sf::Packet receivePkt = receiveMsg(clientSocket);
         int pktSize = receivePkt.getDataSize();
         int response;
         receivePkt >> response;
         //Exclude players who did not provide valid response
-        if (pktSize != 0 && response == 1) {
-            playerClients.push_back(std::move(currPlayerClients[playerIndex]));
-            newPlayers.push_back(players[playerIndex]);
-            newNumPlayers += 1;
-        } else {
-            std::cout << "Player " + players[playerIndex].name + " has disconnected.\n";
-            sf::TcpSocket& clientSocket = *currPlayerClients[playerIndex];
+        if (pktSize == 0 || response != 1) {
             clientSocket.disconnect();
+            std::cout << "Player " + players[playerIndex].name + " has disconnected.\n";
+            playerClients.erase(playerClients.begin() + playerIndex);
+            players.erase(players.begin() + playerIndex);
         }
     }
 
     playerClientsMutex.unlock();
     
-    players = newPlayers;
-    
     numPlayersMutex.lock();
-    numPlayers = newNumPlayers;
+    numPlayers = players.size();
     numActivePlayers = numPlayers;
     numPlayersMutex.unlock();
 }

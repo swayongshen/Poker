@@ -127,7 +127,7 @@ class Game {
         int numPlayers = 0;
         std::mutex numPlayersMutex;
         int numActivePlayers = 0;
-        void acceptConnections(std::unique_ptr<sf::TcpListener> listener, int maxPlayers, bool& isStop);
+        void acceptConnections(std::unique_ptr<sf::TcpListener> listener, int maxPlayers, std::atomic<bool>& isStop);
         void acceptWaitingPlayers();
         Game();
         Game( const Game& ); // non construction-copyable

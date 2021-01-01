@@ -14,6 +14,14 @@ void sendMsg(sf::TcpSocket& socket, int i) {
     socket.send(sendPkt);
 }
 
+std::string receiveMsg(sf::TcpSocket& socket) {
+    sf::Packet receivePkt;
+    socket.receive(receivePkt);
+    std::string receiveStr;
+    receivePkt >> receiveStr;
+    return receiveStr;
+}
+
 bool isContinueGame() {
     std::string continueGame;
     while(true) {
@@ -35,6 +43,8 @@ bool isContinueGame() {
     //Won't reach
     return false;
 }
+
+
 
 int main() {
     sf::TcpSocket socket;
@@ -65,12 +75,16 @@ int main() {
             std::string input;
             std::getline(std::cin, input);
             sendMsg(socket, input);
+        } else if (promptString.substr(0, 5) == "CHECK") {
+            sendMsg(socket, 1);
         } else if (promptString.substr(0, 3) == "END") {
-            if (isContinueGame()) {
-                sendMsg(socket, 1);
-            } else {
+            if (!isContinueGame()) {
                 socket.disconnect();
+                break;
             }
+        } else if (promptString.substr(0, 4) == "WAIT") {
+            std::cout << "Waiting for more players\n";
+            while (receiveMsg(socket) != "START") {};
         } else {
             std::cout << promptString << std::endl;
         }

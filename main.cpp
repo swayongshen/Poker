@@ -5,12 +5,13 @@
 #include <sstream>
 #include <limits>
 #include <thread>
+#include <atomic>
 #include <SFML/Network.hpp>
 #include <signal.h>
 
 #include "Game.h"
 
-bool isStop = false;
+std::atomic<bool> isStop(false);
 
 void stopThread(int s) {
     isStop = true;
@@ -103,9 +104,11 @@ int main() {
             if (round != 0) {
                 game.checkConnectedAll();
                 while (game.numActivePlayers < 2) {
+                    game.broadcastMsg("WAIT");
                     game.checkConnectedAll();
                 }
             }
+            game.broadcastMsg("START");
             round++;
             game.printStatus("NEW GAME");
 
@@ -119,6 +122,7 @@ int main() {
             game.firstDeal();
             //Each player after the big blind starting from the under the gun starts their preflop action
             game.printStatus("PRE-FLOP");
+            game.displayTable();
             game.preFlopRound();
             if (game.hasWinner() != -1) {
                 game.awardWinnersAndRotatePlayers();
@@ -165,6 +169,5 @@ int main() {
         }
     } catch (...) {
         isStop = true;
-        listener.close();
     }
 }
