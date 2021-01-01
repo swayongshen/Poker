@@ -348,7 +348,7 @@ int Game::act(int playerIndex) {
     sendMsg(playerIndex, "* Your turn to act *!\n");
     for (int i = 0; i < playerClients.size(); i++) {
         if (i != playerIndex) {
-            sendMsg(i, "* " + players[i].name + "'s turn to act! *");
+            sendMsg(i, "* " + players[playerIndex].name + "'s turn to act! *");
         }
     }
 
@@ -368,17 +368,14 @@ int Game::act(int playerIndex) {
         sf::SocketSelector selector;
         sf::TcpSocket& playerSocket = *playerClients[playerIndex];
         selector.add(playerSocket);
-        
         std::string input;
         if (selector.wait(sf::seconds(30.0))) {
-            if (selector.isReady(playerSocket)) {
-                sf::Packet receivePkt = receiveMsg(playerSocket);
-                //Disconnected, reply nothing
-                if (receivePkt.getDataSize() == 0) {
-                    input = "F";
-                } else {
-                    receivePkt >> input;
-                }
+            sf::Packet receivePkt = receiveMsg(playerSocket);
+            //Disconnected, reply nothing
+            if (receivePkt.getDataSize() == 0) {
+                input = "F";
+            } else {
+                receivePkt >> input;
             }
         } else {
             input = "F";
@@ -498,8 +495,8 @@ sf::Packet Game::receiveMsg(int clientIndex) {
  */
 void Game::acceptConnections(std::unique_ptr<sf::TcpListener> listenerPtr, int maxPlayers, bool& isStop) {
     try {
+        std::cout << "Thread started\n";
         while (numPlayers < maxPlayers && !isStop) {
-            std::cout << "Thread working\n";
             // accept a new connection
             sf::TcpListener& listener = *listenerPtr;
             std::unique_ptr<sf::TcpSocket> clientPtr = std::make_unique<sf::TcpSocket>();
@@ -862,28 +859,6 @@ void Game::awardWinnersAndRotatePlayers() {
     printStatus("GAME ENDED");
 }
 
-bool Game::isContinueGame() {
-    std::string continueGame;
-    while(true) {
-        std::cout << "Continue game? (Y/N).\n";
-        std::cin >> continueGame;
-        if (!std::cin.fail() && (continueGame == "N" || continueGame == "Y" || continueGame == "n" || continueGame == "y")) {
-            std::cin.clear();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
-            if (continueGame == "N" || continueGame == "n") {
-                std::cout << "Thank you for playing!\n";
-                return false;
-            } else {
-                return true;
-            }
-        } else {
-            std::cout << "Invalid input, try again.\n";
-        }
-    }
-    //Won't reach
-    return false;
-}
-
 void Game::lockNumPlayers() {
     numPlayersMutex.lock();
 }
@@ -902,10 +877,12 @@ void Game::checkConnectedAll() {
     for (int playerIndex = 0; playerIndex < players.size(); playerIndex++) {
         sf::TcpSocket& clientSocket = *currPlayerClients[playerIndex];
         sendMsg(clientSocket, "END");
+        sf::Packet receivePkt = receiveMsg(clientSocket);
+        int pktSize = receivePkt.getDataSize();
         int response;
-        receiveMsg(clientSocket) >> response;
+        receivePkt >> response;
         //Exclude players who did not provide valid response
-        if (response == 1) {
+        if (pktSize != 0 && response == 1) {
             playerClients.push_back(std::move(currPlayerClients[playerIndex]));
             newPlayers.push_back(players[playerIndex]);
             newNumPlayers += 1;

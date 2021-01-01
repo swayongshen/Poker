@@ -122,6 +122,7 @@ int main() {
             game.preFlopRound();
             if (game.hasWinner() != -1) {
                 game.awardWinnersAndRotatePlayers();
+                continue;
             }
 
             /**
@@ -135,6 +136,7 @@ int main() {
             game.round(0, true);
             if (game.hasWinner() != -1) {
                 game.awardWinnersAndRotatePlayers();
+                continue;
             }
 
             /**
@@ -147,6 +149,7 @@ int main() {
             game.round(0, true);
             if (game.hasWinner() != -1) {
                 game.awardWinnersAndRotatePlayers();
+                continue;
             }
 
             /**
