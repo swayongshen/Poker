@@ -10,6 +10,7 @@
 #include <SFML/Network.hpp>
 #include <SFML/Network/Packet.hpp>
 #include <mutex>
+#include <thread>
 
 #include "Game.h"
 #include "Card.h"
@@ -365,7 +366,7 @@ int Game::act(int playerIndex) {
         promptString += "Enter F to fold your hand\n";
         sendMsg(playerIndex, promptString);
         
-        //Wait 20 seconds for input, if no input, fold.
+        //Wait 30 seconds for input, if no input, fold.
         sf::SocketSelector selector;
         sf::TcpSocket& playerSocket = *playerClients[playerIndex];
         selector.add(playerSocket);
@@ -876,7 +877,12 @@ void Game::checkConnectedAll() {
     for (int playerIndex = 0; playerIndex < players.size(); playerIndex++) {
         sf::TcpSocket& clientSocket = *playerClients[playerIndex];
         sendMsg(clientSocket, "CHECK");
-        sf::Packet receivePkt = receiveMsg(clientSocket);
+        sf::Packet receivePkt;
+        sf::SocketSelector selector;
+        selector.add(clientSocket);
+        if (selector.wait(sf::seconds(2))) {
+            receivePkt = receiveMsg(clientSocket);
+        };
         int pktSize = receivePkt.getDataSize();
         int response;
         receivePkt >> response;
@@ -895,4 +901,5 @@ void Game::checkConnectedAll() {
     numPlayers = players.size();
     numActivePlayers = numPlayers;
     numPlayersMutex.unlock();
+    std::cout << "Check connected end\n";
 }
