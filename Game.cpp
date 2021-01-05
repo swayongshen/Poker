@@ -366,22 +366,15 @@ int Game::act(int playerIndex) {
         promptString += "Enter F to fold your hand\n";
         sendMsg(playerIndex, promptString);
         
-        //Wait 30 seconds for input, if no input, fold.
-        sf::SocketSelector selector;
         sf::TcpSocket& playerSocket = *playerClients[playerIndex];
-        selector.add(playerSocket);
         std::string input;
-        if (selector.wait(sf::seconds(30.0))) {
-            sf::Packet receivePkt = receiveMsg(playerSocket);
-            //Disconnected, reply nothing
-            if (receivePkt.getDataSize() == 0) {
-                input = "F";
-            } else {
-                receivePkt >> input;
-            }
-        } else {
-            input = "F";
+        sf::Packet receivePkt = receiveMsg(playerSocket);
+        if (receivePkt.getDataSize() == 0) {
+            broadcastMsg("Player " + players[playerIndex].name + " has disconnected.\n");
+            bets[playerIndex] = -1;
+            return -1;
         }
+        receivePkt >> input;
         
         //Calling
         if (input == "C" || input == "c" && currBet > bets[playerIndex]) {
@@ -500,6 +493,7 @@ void Game::acceptConnections(std::unique_ptr<sf::TcpListener> listenerPtr, int m
         std::cout << "Thread started\n";
         sf::TcpListener& listener = *listenerPtr;
         while (numPlayers < maxPlayers && !isStop) {
+
             // accept a new connection
             std::unique_ptr<sf::TcpSocket> clientPtr = std::make_unique<sf::TcpSocket>();
             sf::TcpSocket& client = *clientPtr;
@@ -508,6 +502,9 @@ void Game::acceptConnections(std::unique_ptr<sf::TcpListener> listenerPtr, int m
             } else {
                 std::string playerName;
                 receiveMsg(client) >> playerName;
+                if (numPlayers < 2) {
+                    sendMsg(client, "WAIT");
+                }
                 waitingPlayersMutex.lock();
                 waitingPlayers.push_back(std::make_pair(playerName, std::move(clientPtr)));
                 waitingPlayersMutex.unlock();
@@ -583,7 +580,7 @@ void Game::rotatePlayersLeft(int d) {
     for (int i = 0; i < g_c_d; i++) { 
         /* move i-th values of blocks */
         Player temp = players[i];
-        std::unique_ptr<sf::TcpSocket>& temp2 = playerClients[i];
+        std::unique_ptr<sf::TcpSocket> temp2 = std::move(playerClients[i]);
         int j = i;
   
         while (1) { 
@@ -595,12 +592,12 @@ void Game::rotatePlayersLeft(int d) {
                 break; 
   
             players[j] = players[k];
-            playerClients[j].swap(playerClients[k]);
+            playerClients[j] = std::move(playerClients[k]);
             
             j = k; 
         }
         players[j] = temp;
-        playerClients[j].swap(temp2);
+        playerClients[j] = std::move(temp2);
 
     } 
     playerClientsMutex.unlock();
@@ -861,6 +858,18 @@ void Game::awardWinnersAndRotatePlayers() {
     this->table = std::vector<Card>();
     printStatus("GAME ENDED");
     broadcastMsg("END");
+    for (int playerIndex = 0; playerIndex < players.size(); playerIndex++) {
+        sf::Packet receivePkt = receiveMsg(playerIndex);
+        int response;
+        receivePkt >> response;
+        if (response == 0) {
+            sf::TcpSocket& clientSocket = *playerClients[playerIndex];
+            clientSocket.disconnect();
+            std::cout << "Player " + players[playerIndex].name + " has left the game.\n";
+            playerClients.erase(playerClients.begin() + playerIndex);
+            players.erase(players.begin() + playerIndex);
+        }
+    }
 }
 
 void Game::lockNumPlayers() {
@@ -880,7 +889,7 @@ void Game::checkConnectedAll() {
         sf::Packet receivePkt;
         sf::SocketSelector selector;
         selector.add(clientSocket);
-        if (selector.wait(sf::seconds(2))) {
+        if (selector.wait(sf::seconds(2.0))) {
             receivePkt = receiveMsg(clientSocket);
         };
         int pktSize = receivePkt.getDataSize();
@@ -901,5 +910,10 @@ void Game::checkConnectedAll() {
     numPlayers = players.size();
     numActivePlayers = numPlayers;
     numPlayersMutex.unlock();
-    std::cout << "Check connected end\n";
+}
+
+void Game::printPlayerNames() {
+    for (Player player : players) {
+        std::cout << player.name << std::endl;
+    }
 }

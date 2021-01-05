@@ -12,9 +12,12 @@
 #include "Game.h"
 
 std::atomic<bool> isStop(false);
+sf::TcpListener listener;
 
 void stopThread(int s) {
     isStop = true;
+    listener.close();
+    exit(1);
 }
 /**
  * Game follows instructions from 
@@ -63,35 +66,39 @@ int main() {
     /**
      * Networking
      */
-    sf::TcpListener listener;
     int portNumber = 53000;
-    //flag to make thread stop
-    
-    try {
-        // bind the listener to a port
-        if (listener.listen(portNumber) != sf::Socket::Done)
-        {
-            std::cout << "Error binding TCP listener to port " + std::to_string(portNumber) << std::endl;
-        }
-        //Start thread which continuously accepts new connections until numPlayers == maxPlayer
-        std::thread tcpAccept (&Game::acceptConnections, std::ref(game), std::unique_ptr<sf::TcpListener>(&listener), maxPlayers, std::ref(isStop));
+    // bind the listener to a port
+    if (listener.listen(portNumber) != sf::Socket::Done)
+    {
+        std::cout << "Error binding TCP listener to port " + std::to_string(portNumber) << std::endl;
+    }
 
+    //Start thread which continuously accepts new connections until numPlayers == maxPlayer
+    std::thread tcpAccept (&Game::acceptConnections, std::ref(game), std::unique_ptr<sf::TcpListener>(&listener), maxPlayers, std::ref(isStop));
+    try {
         //Wait for at least 2 players
         std::cout << "Waiting for at least 2 players to join...\n"; 
         while (game.numPlayers < 2) {
+            //If there are 2 players, check if they are still connected. If there are still 2 connected, break and start game.
+            if (game.numPlayers == 2) {
+                game.checkConnectedAll();
+                if (game.numPlayers == 2) {
+                    break;
+                }
+            }
         }
-        std::cout << "Players found, starting game.\n";
-
-        game.numActivePlayers = game.numPlayers;
-        game.acceptWaitingPlayers();
 
         //Decide who is the first dealer.
         srand(time(NULL));
         int dealerPosition = rand() % game.numActivePlayers;
         std::cout << "Player at index " + std::to_string(dealerPosition) + " has been chosen randomly to be the first dealer.\n\n";
 
+        game.printPlayerNames();
+        
         //Rotate the players vector to make dealer the first player in vector.
         game.rotatePlayersLeft(dealerPosition);
+
+        game.printPlayerNames();
         
         //Reshuffle after using cards to decide who to be dealer
         game.restartDeck();
@@ -108,7 +115,6 @@ int main() {
                     game.checkConnectedAll();
                 }
             }
-            game.broadcastMsg("START");
             round++;
             game.printStatus("NEW GAME");
 
@@ -169,5 +175,7 @@ int main() {
         }
     } catch (...) {
         isStop = true;
+        tcpAccept.join();
+        listener.close();
     }
 }

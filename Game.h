@@ -179,7 +179,11 @@ class Game {
         //Mutex locks to ensure thread safety
         void lockNumPlayers();
         void unlockNumPlayers();
+
+        //Checks if players are still connected and remove them if they are no longer connected.
         void checkConnectedAll();
+
+        void printPlayerNames();
 
         
 };

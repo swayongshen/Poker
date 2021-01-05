@@ -2,6 +2,7 @@
 #include <SFML/Network/Packet.hpp>
 #include <iostream>
 #include <thread>
+#include <signal.h>
 
 void sendMsg(sf::TcpSocket& socket, std::string msg) {
     sf::Packet sendPkt;
@@ -35,7 +36,6 @@ bool isContinueGame() {
                 std::cout << "Thank you for playing!\n";
                 return false;
             } else {
-                std::cout << "Thx\n";
                 return true;
             }
         } else {
@@ -47,13 +47,21 @@ bool isContinueGame() {
     return false;
 }
 
+sf::TcpSocket socket;
 
+void disconnetTCP(int s) {
+    socket.disconnect();
+    exit(1);
+}
 
 int main() {
+    //Disconnect TCP socket if CTRL + C is pressed
+    signal(SIGINT, disconnetTCP);
+
     /**
      * Establish connection to server
      */
-    sf::TcpSocket socket;
+    
     std::string ipAddr = "127.0.0.1";
     int portNumber = 53000;
     sf::Socket::Status status = socket.connect(ipAddr, portNumber);
@@ -66,6 +74,7 @@ int main() {
     std::string input;
     std::getline(std::cin, input);
     sendMsg(socket, input);
+
 
     bool isWaiting = false;
     while (true) {
@@ -81,32 +90,16 @@ int main() {
             isWaiting = false;
             std::cout << promptString.substr(3, promptString.length() - 3) << std::endl;
             std::string input;
-
-            //Use separate thread to achieve 20s timeout for input
-            std::thread inputTimeout([&input] () {
-                std::getline(std::cin, input);
-            });
-            int timeWaited = 0;
-            while (input.length() < 1 && timeWaited < 20) {
-                std::this_thread::sleep_for(std::chrono::seconds(1));
-                timeWaited += 1;
-            }
-            if (input.length() < 1) {
-                input = "F";
-                std::cout << "!!- You have folded due to timeout. -!!\n";
-                inputTimeout.detach();
-            } else {
-                inputTimeout.join();
-            }
-
+            std::getline(std::cin, input);
             sendMsg(socket, input);
         } else if (promptString == "CHECK") {
-            std::cout << "Get check\n";
             sendMsg(socket, 1);
         } else if (promptString == "END") {
             if (!isContinueGame()) {
-                socket.disconnect();
+                sendMsg(socket, 0);
                 break;
+            } else {
+                sendMsg(socket, 1);
             }
         } else if (promptString == "WAIT") {
             if (!isWaiting) {
@@ -118,4 +111,5 @@ int main() {
             std::cout << promptString << std::endl;
         }
     }
+    socket.disconnect();
 }
