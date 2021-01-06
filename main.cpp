@@ -92,13 +92,9 @@ int main() {
         srand(time(NULL));
         int dealerPosition = rand() % game.numActivePlayers;
         std::cout << "Player at index " + std::to_string(dealerPosition) + " has been chosen randomly to be the first dealer.\n\n";
-
-        game.printPlayerNames();
         
         //Rotate the players vector to make dealer the first player in vector.
         game.rotatePlayersLeft(dealerPosition);
-
-        game.printPlayerNames();
         
         //Reshuffle after using cards to decide who to be dealer
         game.restartDeck();
@@ -109,6 +105,10 @@ int main() {
         int round = 0;
         while (true) {
             if (round != 0) {
+                //After every round, the player after the dealer becomes the next dealer
+                game.rotatePlayersLeft(1);
+                game.resetCards();
+                game.playersIsContinue();
                 game.checkConnectedAll();
                 while (game.numActivePlayers < 2) {
                     game.broadcastMsg("WAIT");
@@ -131,7 +131,7 @@ int main() {
             game.displayTable();
             game.preFlopRound();
             if (game.hasWinner() != -1) {
-                game.awardWinnersAndRotatePlayers();
+                game.awardWinners();
                 continue;
             }
 
@@ -143,9 +143,9 @@ int main() {
             //Round 2 betting after flop, starting from small blind after dealer.
             game.printStatus("FLOP");
             game.displayTableAndHand();
-            game.round(0, true);
+            game.postFlopRound();
             if (game.hasWinner() != -1) {
-                game.awardWinnersAndRotatePlayers();
+                game.awardWinners();
                 continue;
             }
 
@@ -156,9 +156,9 @@ int main() {
             game.dealTurnOrRiver();
             game.printStatus("TURN");
             game.displayTableAndHand();
-            game.round(0, true);
+            game.postFlopRound();
             if (game.hasWinner() != -1) {
-                game.awardWinnersAndRotatePlayers();
+                game.awardWinners();
                 continue;
             }
 
@@ -169,9 +169,9 @@ int main() {
             game.dealTurnOrRiver();
             game.printStatus("RIVER");
             game.displayTableAndHand();
-            game.round(0, true);
+            game.postFlopRound();
             //At this point, winner has to be determined.
-            game.awardWinnersAndRotatePlayers();
+            game.awardWinners();
         }
     } catch (...) {
         isStop = true;

@@ -16,6 +16,412 @@
 #include "Card.h"
 
 /**
+ * Public methods
+ * -----------------------------------------------
+ */
+Game::Game() {
+    this->players = std::vector<Player>();
+    this->deck = Deck();
+    this->table = std::vector<Card>();
+    this->pot = 0;
+    this->bets = std::vector<int>();
+    this->playerClients = std::vector<std::unique_ptr<sf::TcpSocket>>();
+    this->waitingPlayers = std::vector<std::pair<std::string, std::unique_ptr<sf::TcpSocket>>>();
+}
+
+void Game::acceptConnections(std::unique_ptr<sf::TcpListener> listenerPtr, int maxPlayers, std::atomic<bool>& isStop) {
+    try {
+        std::cout << "Thread started\n";
+        sf::TcpListener& listener = *listenerPtr;
+        while (numPlayers < maxPlayers && !isStop) {
+
+            // accept a new connection
+            std::unique_ptr<sf::TcpSocket> clientPtr = std::make_unique<sf::TcpSocket>();
+            sf::TcpSocket& client = *clientPtr;
+            if (listener.accept(client) != sf::Socket::Done) {
+                std::cout << "Error accepting new connection\n";
+            } else {
+                std::string playerName;
+                receiveMsg(client) >> playerName;
+                if (numPlayers < 2) {
+                    sendMsg(client, "WAIT");
+                }
+                waitingPlayersMutex.lock();
+                waitingPlayers.push_back(std::make_pair(playerName, std::move(clientPtr)));
+                waitingPlayersMutex.unlock();
+                std::cout << playerName + " has joined the game.\n";
+                numPlayersMutex.lock();
+                numPlayers += 1;
+                numPlayersMutex.unlock();
+                
+            }
+        }
+        listener.close();
+        std::cout << "Thread stopped\n";
+    } catch (...) {
+        std::cout << "Thread error!\n";
+    }
+}
+
+void Game::acceptWaitingPlayers() {
+    waitingPlayersMutex.lock();
+    playerClientsMutex.lock();
+    for (int i = 0; i < waitingPlayers.size(); i++) {
+        addPlayer(waitingPlayers[i].first, 500);
+        playerClients.push_back(std::move(waitingPlayers[i].second));
+    }
+    waitingPlayers = std::vector<std::pair<std::string, std::unique_ptr<sf::TcpSocket>>>();
+    waitingPlayersMutex.unlock();
+    playerClientsMutex.unlock();
+}
+
+void Game::addPlayer(std::string name, int chips) {
+    Player newPlayer(name, chips);
+    players.push_back(newPlayer);
+    bets.push_back(0);
+}
+
+void Game::firstDeal() {
+    for (int i = 0; i < players.size(); i++) {
+        players[i] = players[i].receiveDeal({deck.dealCard(), deck.dealCard()});
+    }
+}
+
+void Game::restartDeck() {
+    this->deck = Deck();
+}
+
+void Game::blindsBid(int smallBlindAmt) {
+    bet(1 % players.size(), smallBlindAmt);
+    bet(2 % players.size(), smallBlindAmt * 2);
+}
+
+void Game::rotatePlayersLeft(int d) {
+    int n = players.size();
+    /* To handle if d >= n */
+    d = d % n; 
+    int g_c_d = std::__gcd(d, n); 
+    playerClientsMutex.lock();
+    for (int i = 0; i < g_c_d; i++) { 
+        /* move i-th values of blocks */
+        Player temp = players[i];
+        std::unique_ptr<sf::TcpSocket> temp2 = std::move(playerClients[i]);
+        int j = i;
+  
+        while (1) { 
+            int k = j + d; 
+            if (k >= n) 
+                k = k - n; 
+  
+            if (k == i) 
+                break; 
+  
+            players[j] = players[k];
+            playerClients[j] = std::move(playerClients[k]);
+            
+            j = k; 
+        }
+        players[j] = temp;
+        playerClients[j] = std::move(temp2);
+
+    } 
+    playerClientsMutex.unlock();
+}
+
+void Game::bet(int playerIndex, int amt) {
+    try {
+        if (amt <= 0) {
+            throw ("Invalid bet, please bet more than $0.");
+        } else if (amt > players[playerIndex].getChipAmt()) {
+            //If bet exceeds, then just bet everything
+            players[playerIndex] = players[playerIndex].bet(players[playerIndex].getChipAmt());
+            bets[playerIndex] += players[playerIndex].getChipAmt();
+            pot += players[playerIndex].getChipAmt();
+        } else {
+            players[playerIndex] = players[playerIndex].bet(amt);
+            bets[playerIndex] += amt;
+            pot += amt;
+        }
+    } catch (std::string exception) {
+        std::cout << exception << std::endl;
+    }
+}
+
+void Game::broadcastMsg(std::string msg) {
+    for (int i = 0; i < players.size(); i++) {
+        sendMsg(i, msg);
+    }
+}
+
+void Game::displayTable() {
+    std::string output;
+    output += "------------------------------\n"; 
+    output += "Table:\n" ;
+    
+    //Print all cards on table if any.
+    for (Card card : table) {
+        output << card;
+    }
+    
+    output += "\n\n";
+    output += "Pot: $" + std::to_string(pot) + "\n";
+    output += "------------------------------\n";
+
+    broadcastMsg(output);
+}
+
+void Game::displayTableAndHand() {
+    displayTable();
+    
+    for (int playerIndex = 0; playerIndex < players.size(); playerIndex++) {
+        std::string output;
+        output = "Your hand:\n";
+        std::vector<Card> hand = players[playerIndex].getHand();
+        for (Card card : hand) {
+            output << card;
+        }
+        output += "\nYour chips: $" + std::to_string(players[playerIndex].getChipAmt()) + "\n";
+        output += "Your current bet: $" + std::to_string(bets[playerIndex]) + "\n";
+        sendMsg(playerIndex, output);
+    }
+}
+
+void Game::displayTableAndAllUnfoldHands() {
+    displayTable();
+    std::string output;
+    for (int i = 0; i < players.size(); i++) {
+        if (bets[i] != -1) {
+            output += players[i].getName() + ": ";
+            std::vector<Card> hand = players[i].getHand();
+            for (Card card : hand) {
+                output << card;
+            }
+        }
+        output += "\n";
+    }
+    output += "\n";
+    broadcastMsg(output);
+}
+
+void Game::printStatus(std::string status) {
+    std::string output;
+    output += "/****************************\\\n";
+    output += std::string((30 - status.size())/2, ' ');
+    output += status += "\n";
+    output += "\\****************************/\n";
+    broadcastMsg(output);
+}
+
+int Game::preFlopRound() {
+    return round(2 % players.size());
+}
+
+int Game::postFlopRound() {
+    return round(0);
+}
+
+void Game::dealFlop() {
+    //Draw a card to be burned.
+    draw();
+
+    //Draw 3 cards and add it to the table
+    for (int i = 0; i < 3; i++) {
+        table.push_back(draw());
+    }
+}
+
+void Game::dealTurnOrRiver() {
+    //Burn
+    draw();
+
+    table.push_back(draw());
+}
+
+int Game::hasWinner() {
+    int winnerIndex = -1;
+
+    for (int i = 0; i < bets.size(); i++) {
+        if (bets[i] != -1) {
+            //Has at least 2 players that hasn't folded.
+            if (winnerIndex != -1) {
+                return -1;
+            } else {
+                winnerIndex = i;
+            }
+        }
+    }
+    return winnerIndex;
+}
+
+void Game::awardWinners() {
+    printStatus("CALCULATING OUTCOME");
+    int winnerIndex = hasWinner();
+    //Vector to keep track of amount players won so that it can be printed afterwards.
+    std::vector<int> winAmt(players.size(), 0);
+
+    //If winnerIndex != -1 means there is a clear winner others folded.
+    if (winnerIndex != -1) {
+        displayTable();
+        players[winnerIndex] = players[winnerIndex].awardChips(pot);
+        winAmt[winnerIndex] += pot;
+    } else {
+        displayTableAndAllUnfoldHands();
+        std::vector<int> handRanks;
+        for (int i = 0; i < players.size(); i++) {
+            if (bets[i] != -1) {
+                handRanks.push_back(handRank(players[i]));
+            } else {
+                handRanks.push_back(-1);
+            }
+        }
+
+        for (int i = 0; i < players.size(); i++) {
+            if (handRanks[i] != -1) {
+                for (int j = 0; j < players.size(); j++) {
+                    if (i != j && handRanks[i] == handRanks[j]) {
+                        if (compareHands(players[i], players[j]) == 1) {
+                            handRanks[i] += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        //Sort bets by increasing amount
+        std::map<int, std::vector<int>> betsMap;
+        std::unordered_set<int> playersInvolved;
+
+        //For each bet amount, handle it.
+        for (int i = 0; i < bets.size(); i++) {
+            if (bets[i] != -1) {
+                if (betsMap.count(bets[i]) == 0) {
+                    betsMap[bets[i]] = {i};
+                } else {
+                    betsMap[bets[i]].push_back(i);
+                }
+                playersInvolved.insert(i);
+            }
+        }
+
+        //Determine who wins each bet amount
+        for (auto& pair : betsMap) {
+
+            //Get the players who won this bet amount
+            std::vector<int> topPlayers;
+            for (int playerIndex : playersInvolved) {
+                if (topPlayers.size() != 0) {
+                    if (handRanks[playerIndex] > handRanks[topPlayers[0]]) {
+                        topPlayers = {playerIndex};
+                    } else if (handRanks[playerIndex] == handRanks[topPlayers[0]]) {
+                        topPlayers.push_back(playerIndex);
+                    }
+                } else {
+                    topPlayers = {playerIndex};
+                }
+            }
+
+            //Distribute the money which is bet amount * num of players involved
+            int totalAmount = pair.first * playersInvolved.size();
+            int splitAmt = (int) (totalAmount / topPlayers.size());
+            for (int winningPlayerIdx : topPlayers) {
+                players[winningPlayerIdx].awardChips(splitAmt);
+                winAmt[winningPlayerIdx] += splitAmt;
+            }
+
+            //Remove the people who bet this amount as they do not qualify for the next amounts.
+            for (int playerIdx : pair.second) {
+                playersInvolved.erase(playerIdx);
+            }
+            
+            //Deduct the bet amount from the rest of bets.
+            for (auto& otherPair : betsMap) {
+                int originalBetAmt = otherPair.first;
+                std::vector<int> playersWhoBetThisAmt = otherPair.second;
+                betsMap.erase(originalBetAmt);
+                betsMap[originalBetAmt - pair.first] = playersWhoBetThisAmt; 
+            }
+        }
+    }
+
+    //Print out the amount that players have won
+    for (int i = 0; i < players.size(); i++) {
+        if (winAmt[i] != 0) {
+            broadcastMsg("*!! " + players[i].name + " has won $" + std::to_string(winAmt[i]) + " !!*\n");
+        }
+    }
+
+    
+    printStatus("GAME ENDED");
+}
+
+void Game::resetCards() {
+    pot = 0;
+    for (int i = 0; i < players.size(); i++) {
+        bets[i] = 0;
+        players[i] = players[i].resetHand();
+    }
+    restartDeck();
+    this->table = std::vector<Card>();
+}
+
+void Game::playersIsContinue() {
+    broadcastMsg("END");
+    /** 
+     * Broadcasting "END" invokes a Y/N response from client. If client press N, 0 is sent from client
+     * and he will be disconnected and if he presses yes, 1 is sent instead.
+    */
+    for (int playerIndex = 0; playerIndex < players.size(); playerIndex++) {
+        sf::Packet receivePkt = receiveMsg(playerIndex);
+        int response;
+        receivePkt >> response;
+        if (response == 0) {
+            sf::TcpSocket& clientSocket = *playerClients[playerIndex];
+            clientSocket.disconnect();
+            std::cout << "Player " + players[playerIndex].name + " has left the game.\n";
+            playerClients.erase(playerClients.begin() + playerIndex);
+            players.erase(players.begin() + playerIndex);
+            playerIndex -= 1;
+        } else {
+            std::cout << "Player " + players[playerIndex].name + " wants to continue.\n";
+        }
+    }
+}
+
+
+void Game::checkConnectedAll() {
+    acceptWaitingPlayers();
+    playerClientsMutex.lock();
+    for (int playerIndex = 0; playerIndex < players.size(); playerIndex++) {
+        sf::TcpSocket& clientSocket = *playerClients[playerIndex];
+        sendMsg(clientSocket, "CHECK");
+        sf::Packet receivePkt;
+        sf::SocketSelector selector;
+        selector.add(clientSocket);
+        if (selector.wait(sf::seconds(2.0))) {
+            receivePkt = receiveMsg(clientSocket);
+        };
+        int pktSize = receivePkt.getDataSize();
+        int response;
+        receivePkt >> response;
+        //Exclude players who did not provide valid response
+        if (pktSize == 0 || response != 1) {
+            clientSocket.disconnect();
+            std::cout << "Player " + players[playerIndex].name + " has disconnected.\n";
+            playerClients.erase(playerClients.begin() + playerIndex);
+            players.erase(players.begin() + playerIndex);
+            playerIndex -=1 ;
+        }
+    }
+
+    playerClientsMutex.unlock();
+    
+    numPlayersMutex.lock();
+    
+    numPlayers = players.size();
+    numActivePlayers = numPlayers;
+    numPlayersMutex.unlock();
+}
+/**
  * Private methods
  * -------------------------------------------
  */
@@ -64,6 +470,10 @@ Game::Player Game::Player::resetHand() {
     return Player(name, std::vector<Card>(), chips);
 }
 
+Card Game::draw() {
+    return deck.dealCard();
+}
+
 std::vector<Card> Game::loadHandAndTable(Player player) {
     std::vector<Card> loaded;
     for (Card card : table) {
@@ -104,7 +514,8 @@ std::vector<int> Game::hasFlush(Player player) {
                     }
                 });
                 std::sort(cardsOfSuit.begin(), cardsOfSuit.end());
-                return cardsOfSuit;
+                //Only return the top 5 cards in the flush
+                return std::vector<int>(cardsOfSuit.begin(), cardsOfSuit.begin() + 4);
             }
         }
         //None of the suits have 5 cards
@@ -300,7 +711,8 @@ int Game::handRank(Player player) {
     }
 }
 
-int Game::compareInt(int A, int B) {
+//Helper function to compare 2 integers.
+int compareInt(int A, int B) {
     if (A < B) {
         return -1;
     } else if (A > B) {
@@ -406,6 +818,32 @@ int Game::act(int playerIndex) {
     }  
 }
 
+int Game::round(int playerIndex) {
+    int numPlayers = players.size();
+    //raisedByPlayer notes the index of the last player who raised, initialized to BB's index.
+    int raisedByPlayer = playerIndex;
+    int loopMax = numPlayers;
+    //Loop will either go through all other players once again or more if there was another raise
+    int i = 0;
+    while (i < loopMax) {
+        //Start from the player after the player who raised.
+        int playerIndex = (i + raisedByPlayer + 1) % numPlayers;
+        if (i == loopMax - 1 && allOthersFolded(playerIndex)) {
+            return raisedByPlayer;
+        }
+        int playerTurn = act(playerIndex);
+        if (playerTurn == 1) {
+            //If player raises, restarts loop but the raisedByPlayer is set to the player who raised.
+            raisedByPlayer = playerIndex;
+            //Set i to -1 so that next iteration i = 0
+            i = -1;
+            loopMax = numPlayers - 1;
+        }
+        i++;
+    }
+    return raisedByPlayer;
+}
+
 bool Game::allOthersFolded(int playerIndex) {
     for (int i = 0; i < players.size(); i++) {
         if (i != playerIndex && bets[i] != -1) {
@@ -484,446 +922,3 @@ sf::Packet Game::receiveMsg(int clientIndex) {
 }
 
 
-/**
- * Public methods
- * -----------------------------------------------
- */
-void Game::acceptConnections(std::unique_ptr<sf::TcpListener> listenerPtr, int maxPlayers, std::atomic<bool>& isStop) {
-    try {
-        std::cout << "Thread started\n";
-        sf::TcpListener& listener = *listenerPtr;
-        while (numPlayers < maxPlayers && !isStop) {
-
-            // accept a new connection
-            std::unique_ptr<sf::TcpSocket> clientPtr = std::make_unique<sf::TcpSocket>();
-            sf::TcpSocket& client = *clientPtr;
-            if (listener.accept(client) != sf::Socket::Done) {
-                std::cout << "Error accepting new connection\n";
-            } else {
-                std::string playerName;
-                receiveMsg(client) >> playerName;
-                if (numPlayers < 2) {
-                    sendMsg(client, "WAIT");
-                }
-                waitingPlayersMutex.lock();
-                waitingPlayers.push_back(std::make_pair(playerName, std::move(clientPtr)));
-                waitingPlayersMutex.unlock();
-                std::cout << playerName + " has joined the game.\n";
-                numPlayersMutex.lock();
-                numPlayers += 1;
-                numPlayersMutex.unlock();
-                
-            }
-        }
-        listener.close();
-        std::cout << "Thread stopped\n";
-    } catch (...) {
-        std::cout << "Thread error!\n";
-    }
-}
-
-void Game::acceptWaitingPlayers() {
-    waitingPlayersMutex.lock();
-    playerClientsMutex.lock();
-    for (int i = 0; i < waitingPlayers.size(); i++) {
-        addPlayer(waitingPlayers[i].first, 500);
-        playerClients.push_back(std::move(waitingPlayers[i].second));
-    }
-    waitingPlayers = std::vector<std::pair<std::string, std::unique_ptr<sf::TcpSocket>>>();
-    waitingPlayersMutex.unlock();
-    playerClientsMutex.unlock();
-}
-
-Game::Game() {
-    this->players = std::vector<Player>();
-    this->deck = Deck();
-    this->table = std::vector<Card>();
-    this->pot = 0;
-    this->bets = std::vector<int>();
-    this->playerClients = std::vector<std::unique_ptr<sf::TcpSocket>>();
-    this->waitingPlayers = std::vector<std::pair<std::string, std::unique_ptr<sf::TcpSocket>>>();
-}
-
-
-
-void Game::addPlayer(std::string name, int chips) {
-    Player newPlayer(name, chips);
-    players.push_back(newPlayer);
-    bets.push_back(0);
-}
-
-void Game::firstDeal() {
-    for (int i = 0; i < players.size(); i++) {
-        players[i] = players[i].receiveDeal({deck.dealCard(), deck.dealCard()});
-    }
-}
-
-Card Game::draw() {
-    return deck.dealCard();
-}
-
-void Game::restartDeck() {
-    this->deck = Deck();
-}
-
-void Game::blindsBid(int smallBlindAmt) {
-    bet(1 % players.size(), smallBlindAmt);
-    bet(2 % players.size(), smallBlindAmt * 2);
-}
-
-void Game::rotatePlayersLeft(int d) {
-    int n = players.size();
-    /* To handle if d >= n */
-    d = d % n; 
-    int g_c_d = std::__gcd(d, n); 
-    playerClientsMutex.lock();
-    for (int i = 0; i < g_c_d; i++) { 
-        /* move i-th values of blocks */
-        Player temp = players[i];
-        std::unique_ptr<sf::TcpSocket> temp2 = std::move(playerClients[i]);
-        int j = i;
-  
-        while (1) { 
-            int k = j + d; 
-            if (k >= n) 
-                k = k - n; 
-  
-            if (k == i) 
-                break; 
-  
-            players[j] = players[k];
-            playerClients[j] = std::move(playerClients[k]);
-            
-            j = k; 
-        }
-        players[j] = temp;
-        playerClients[j] = std::move(temp2);
-
-    } 
-    playerClientsMutex.unlock();
-}
-
-void Game::bet(int playerIndex, int amt) {
-    try {
-        if (amt <= 0) {
-            throw ("Invalid bet, please bet more than $0.");
-        } else if (amt > players[playerIndex].getChipAmt()) {
-            //If bet exceeds, then just bet everything
-            players[playerIndex] = players[playerIndex].bet(players[playerIndex].getChipAmt());
-            bets[playerIndex] += players[playerIndex].getChipAmt();
-            pot += players[playerIndex].getChipAmt();
-        } else {
-            players[playerIndex] = players[playerIndex].bet(amt);
-            bets[playerIndex] += amt;
-            pot += amt;
-        }
-    } catch (std::string exception) {
-        std::cout << exception << std::endl;
-    }
-}
-
-void Game::broadcastMsg(std::string msg) {
-    for (int i = 0; i < players.size(); i++) {
-        sendMsg(i, msg);
-    }
-}
-
-void Game::displayTable() {
-    std::string output;
-    output += "------------------------------\n"; 
-    output += "Table:\n" ;
-    
-    //Print all cards on table if any.
-    for (Card card : table) {
-        output << card;
-    }
-    
-    output += "\n\n";
-    output += "Pot: $" + std::to_string(pot) + "\n";
-    output += "------------------------------\n";
-
-    broadcastMsg(output);
-}
-
-void Game::displayTableAndHand() {
-    displayTable();
-    
-    for (int playerIndex = 0; playerIndex < players.size(); playerIndex++) {
-        std::string output;
-        output = "Your hand:\n";
-        std::vector<Card> hand = players[playerIndex].getHand();
-        for (Card card : hand) {
-            output << card;
-        }
-        output += "\nYour chips: $" + std::to_string(players[playerIndex].getChipAmt()) + "\n";
-        output += "Your current bet: $" + std::to_string(bets[playerIndex]) + "\n";
-        sendMsg(playerIndex, output);
-    }
-}
-
-void Game::printStatus(std::string status) {
-    std::string output;
-    output += "/****************************\\\n";
-    output += std::string((30 - status.size())/2, ' ');
-    output += status += "\n";
-    output += "\\****************************/\n";
-    broadcastMsg(output);
-}
-
-int Game::round(int playerIndex, bool isFullRound) {
-    int numPlayers = players.size();
-    //raisedByPlayer notes the index of the last player who raised, initialized to BB's index.
-    int raisedByPlayer = playerIndex;
-    int loopMax = isFullRound ? numPlayers : numPlayers - 1;
-    //Loop will either go through all other players once again or more if there was another raise
-    int i = 0;
-    while (i < loopMax) {
-        //Start from the player after the player who raised.
-        int playerIndex = (i + raisedByPlayer + 1) % numPlayers;
-        if (i == loopMax - 1 && allOthersFolded(playerIndex)) {
-            return raisedByPlayer;
-        }
-        int playerTurn = act(playerIndex);
-        if (playerTurn == 1) {
-            //If player raises, restarts loop but the raisedByPlayer is set to the player who raised.
-            raisedByPlayer = playerIndex;
-            //Set i to -1 so that next iteration i = 0
-            i = -1;
-            loopMax = numPlayers - 1;
-        }
-        i++;
-    }
-    return raisedByPlayer;
-}
-
-int Game::preFlopRound() {
-    return round(2 % players.size(), true);
-}
-
-void Game::dealFlop() {
-    //Draw a card to be burned.
-    draw();
-
-    //Draw 3 cards and add it to the table
-    for (int i = 0; i < 3; i++) {
-        table.push_back(draw());
-    }
-}
-
-void Game::dealTurnOrRiver() {
-    //Burn
-    draw();
-
-    table.push_back(draw());
-}
-
-int Game::hasWinner() {
-    int winnerIndex = -1;
-
-    for (int i = 0; i < bets.size(); i++) {
-        if (bets[i] != -1) {
-            //Has at least 2 players that hasn't folded.
-            if (winnerIndex != -1) {
-                return -1;
-            } else {
-                winnerIndex = i;
-            }
-        }
-    }
-    return winnerIndex;
-}
-
-void Game::displayTableAndAllUnfoldHands() {
-    displayTable();
-    std::string output;
-    for (int i = 0; i < players.size(); i++) {
-        if (bets[i] != -1) {
-            output += players[i].getName() + ": ";
-            std::vector<Card> hand = players[i].getHand();
-            for (Card card : hand) {
-                output << card;
-            }
-        }
-        output += "\n";
-    }
-    output += "\n";
-    broadcastMsg(output);
-}
-
-void Game::awardWinnersAndRotatePlayers() {
-    printStatus("CALCULATING OUTCOME");
-    int winnerIndex = hasWinner();
-    //Vector to keep track of amount players won so that it can be printed afterwards.
-    std::vector<int> winAmt(players.size(), 0);
-
-    //If winnerIndex != -1 means there is a clear winner others folded.
-    if (winnerIndex != -1) {
-        displayTable();
-        players[winnerIndex] = players[winnerIndex].awardChips(pot);
-        winAmt[winnerIndex] += pot;
-    } else {
-        displayTableAndAllUnfoldHands();
-        std::vector<int> handRanks;
-        for (int i = 0; i < players.size(); i++) {
-            if (bets[i] != -1) {
-                handRanks.push_back(handRank(players[i]));
-            } else {
-                handRanks.push_back(-1);
-            }
-        }
-
-        for (int i = 0; i < players.size(); i++) {
-            if (handRanks[i] != -1) {
-                for (int j = 0; j < players.size(); j++) {
-                    if (i != j && handRanks[i] == handRanks[j]) {
-                        if (compareHands(players[i], players[j]) == 1) {
-                            handRanks[i] += 1;
-                        }
-                    }
-                }
-            }
-        }
-
-        //Sort bets by increasing amount
-        std::map<int, std::vector<int>> betsMap;
-        std::unordered_set<int> playersInvolved;
-
-        //For each bet amount, handle it.
-        for (int i = 0; i < bets.size(); i++) {
-            if (bets[i] != -1) {
-                if (betsMap.count(bets[i]) == 0) {
-                    betsMap[bets[i]] = {i};
-                } else {
-                    betsMap[bets[i]].push_back(i);
-                }
-                playersInvolved.insert(i);
-            }
-        }
-
-        //Determine who wins each bet amount
-        for (auto& pair : betsMap) {
-
-            //Get the players who won this bet amount
-            std::vector<int> topPlayers;
-            for (int playerIndex : playersInvolved) {
-                if (topPlayers.size() != 0) {
-                    if (handRanks[playerIndex] > handRanks[topPlayers[0]]) {
-                        topPlayers = {playerIndex};
-                    } else if (handRanks[playerIndex] == handRanks[topPlayers[0]]) {
-                        topPlayers.push_back(playerIndex);
-                    }
-                } else {
-                    topPlayers = {playerIndex};
-                }
-            }
-
-            //Distribute the money which is bet amount * num of players involved
-            int totalAmount = pair.first * playersInvolved.size();
-            int splitAmt = (int) (totalAmount / topPlayers.size());
-            for (int winningPlayerIdx : topPlayers) {
-                players[winningPlayerIdx].awardChips(splitAmt);
-                winAmt[winningPlayerIdx] += splitAmt;
-            }
-
-            //Remove the people who bet this amount as they do not qualify for the next amounts.
-            for (int playerIdx : pair.second) {
-                playersInvolved.erase(playerIdx);
-            }
-            
-            //Deduct the bet amount from the rest of bets.
-            for (auto& otherPair : betsMap) {
-                int originalBetAmt = otherPair.first;
-                std::vector<int> playersWhoBetThisAmt = otherPair.second;
-                betsMap.erase(originalBetAmt);
-                betsMap[originalBetAmt - pair.first] = playersWhoBetThisAmt; 
-            }
-        }
-    }
-
-    //Print out the amount that players have won
-    for (int i = 0; i < players.size(); i++) {
-        if (winAmt[i] != 0) {
-            broadcastMsg("*!! " + players[i].name + " has won $" + std::to_string(winAmt[i]) + " !!*\n");
-        }
-    }
-
-    //Restore state for next game/hand.
-    pot = 0;
-    for (int i = 0; i < players.size(); i++) {
-        bets[i] = 0;
-        players[i] = players[i].resetHand();
-    }
-    rotatePlayersLeft(1);
-    restartDeck();
-    this->table = std::vector<Card>();
-    printStatus("GAME ENDED");
-    broadcastMsg("END");
-    /** 
-     * Broadcasting "END" invokes a Y/N response from client. If client press N, 0 is sent from client
-     * and he will be disconnected and if he presses yes, 1 is sent instead.
-    */
-    for (int playerIndex = 0; playerIndex < players.size(); playerIndex++) {
-        sf::Packet receivePkt = receiveMsg(playerIndex);
-        int response;
-        receivePkt >> response;
-        if (response == 0) {
-            sf::TcpSocket& clientSocket = *playerClients[playerIndex];
-            clientSocket.disconnect();
-            std::cout << "Player " + players[playerIndex].name + " has left the game.\n";
-            playerClients.erase(playerClients.begin() + playerIndex);
-            players.erase(players.begin() + playerIndex);
-            playerIndex -= 1;
-        } else {
-            std::cout << "Player " + players[playerIndex].name + " wants to continue.\n";
-        }
-        std::cout << "Check end stop \n";
-    }
-}
-
-void Game::lockNumPlayers() {
-    numPlayersMutex.lock();
-}
-
-void Game::unlockNumPlayers() {
-    numPlayersMutex.unlock();
-}
-
-void Game::checkConnectedAll() {
-    acceptWaitingPlayers();
-    playerClientsMutex.lock();
-    for (int playerIndex = 0; playerIndex < players.size(); playerIndex++) {
-        sf::TcpSocket& clientSocket = *playerClients[playerIndex];
-        sendMsg(clientSocket, "CHECK");
-        sf::Packet receivePkt;
-        sf::SocketSelector selector;
-        selector.add(clientSocket);
-        if (selector.wait(sf::seconds(2.0))) {
-            receivePkt = receiveMsg(clientSocket);
-        };
-        int pktSize = receivePkt.getDataSize();
-        int response;
-        receivePkt >> response;
-        //Exclude players who did not provide valid response
-        if (pktSize == 0 || response != 1) {
-            clientSocket.disconnect();
-            std::cout << "Player " + players[playerIndex].name + " has disconnected.\n";
-            playerClients.erase(playerClients.begin() + playerIndex);
-            players.erase(players.begin() + playerIndex);
-            playerIndex -=1 ;
-        }
-    }
-
-    playerClientsMutex.unlock();
-    
-    numPlayersMutex.lock();
-    
-    numPlayers = players.size();
-    numActivePlayers = numPlayers;
-    numPlayersMutex.unlock();
-}
-
-void Game::printPlayerNames() {
-    for (Player player : players) {
-        std::cout << player.name << std::endl;
-    }
-}
