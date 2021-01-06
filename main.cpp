@@ -78,8 +78,8 @@ int main() {
     try {
         //Wait for at least 2 players
         std::cout << "Waiting for at least 2 players to join...\n"; 
-        while (game.numPlayers < 2) {
-            //If there are 2 players, check if they are still connected. If there are still 2 connected, break and start game.
+        while (game.numPlayers <= 2) {
+            //If there are 2 players, check if they are still connected. If there are still 2 connected after checking, break and start game.
             if (game.numPlayers == 2) {
                 game.checkConnectedAll();
                 if (game.numPlayers == 2) {

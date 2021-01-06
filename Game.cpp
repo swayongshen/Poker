@@ -858,6 +858,10 @@ void Game::awardWinnersAndRotatePlayers() {
     this->table = std::vector<Card>();
     printStatus("GAME ENDED");
     broadcastMsg("END");
+    /** 
+     * Broadcasting "END" invokes a Y/N response from client. If client press N, 0 is sent from client
+     * and he will be disconnected and if he presses yes, 1 is sent instead.
+    */
     for (int playerIndex = 0; playerIndex < players.size(); playerIndex++) {
         sf::Packet receivePkt = receiveMsg(playerIndex);
         int response;
@@ -868,7 +872,11 @@ void Game::awardWinnersAndRotatePlayers() {
             std::cout << "Player " + players[playerIndex].name + " has left the game.\n";
             playerClients.erase(playerClients.begin() + playerIndex);
             players.erase(players.begin() + playerIndex);
+            playerIndex -= 1;
+        } else {
+            std::cout << "Player " + players[playerIndex].name + " wants to continue.\n";
         }
+        std::cout << "Check end stop \n";
     }
 }
 
@@ -901,12 +909,14 @@ void Game::checkConnectedAll() {
             std::cout << "Player " + players[playerIndex].name + " has disconnected.\n";
             playerClients.erase(playerClients.begin() + playerIndex);
             players.erase(players.begin() + playerIndex);
+            playerIndex -=1 ;
         }
     }
 
     playerClientsMutex.unlock();
     
     numPlayersMutex.lock();
+    
     numPlayers = players.size();
     numActivePlayers = numPlayers;
     numPlayersMutex.unlock();
