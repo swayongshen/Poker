@@ -202,7 +202,7 @@ class Game {
         std::vector<Card> loadHandAndTable(Player player);
 
         /**
-         * Returns the ranks of the top 5 cards in the flush if any and {-1} is there is no flush.
+         * Returns the ranks of the top 5 cards in the flush if any and {-1} if there is no flush.
          */
         std::vector <int> hasFlush(Player player);
 
@@ -262,8 +262,8 @@ class Game {
         int handRank(Player player);
 
         /**
-         * Compare up to limitOfKicker number of cards between playerA and playerB excluding the cards to remove from comparison.
-         * E.g. if both player A and B have a pair of 5 cardsToRmoeve = {5}, we remove the pair of 5 from consideration 
+         * Compare up to limitOfKickers number of cards between playerA and playerB excluding the cards to remove from comparison.
+         * E.g. if both player A and B have a pair of 5, cardsToRmoeve = {5}, we remove the pair of 5 from consideration 
          * then compare the highest 3 (limitOfKickers = 3) from rest of their cards to see who has a higher kicker.
          * 
          * Returns 1 if A > B, -1 if A < B and 0 if A == B.
