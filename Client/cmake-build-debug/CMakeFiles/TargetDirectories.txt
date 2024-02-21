@@ -1,0 +1,3 @@
+/Users/I589141/code/Poker/Client/cmake-build-debug/CMakeFiles/PokerClient.dir
+/Users/I589141/code/Poker/Client/cmake-build-debug/CMakeFiles/edit_cache.dir
+/Users/I589141/code/Poker/Client/cmake-build-debug/CMakeFiles/rebuild_cache.dir
