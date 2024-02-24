@@ -4,19 +4,19 @@
 #include <thread>
 #include <signal.h>
 
-void sendMsg(sf::TcpSocket& socket, std::string msg) {
+void sendMsg(sf::TcpSocket &socket, std::string msg) {
     sf::Packet sendPkt;
     sendPkt << msg;
     socket.send(sendPkt);
 }
 
-void sendMsg(sf::TcpSocket& socket, int i) {
+void sendMsg(sf::TcpSocket &socket, int i) {
     sf::Packet sendPkt;
     sendPkt << i;
     socket.send(sendPkt);
 }
 
-std::string receiveMsg(sf::TcpSocket& socket) {
+std::string receiveMsg(sf::TcpSocket &socket) {
     sf::Packet receivePkt;
     socket.receive(receivePkt);
     std::string receiveStr;
@@ -26,12 +26,13 @@ std::string receiveMsg(sf::TcpSocket& socket) {
 
 bool isContinueGame() {
     std::string continueGame;
-    while(true) {
+    while (true) {
         std::cout << "Continue game? (Y/N).\n";
         std::cin >> continueGame;
-        if (!std::cin.fail() && (continueGame == "N" || continueGame == "Y" || continueGame == "n" || continueGame == "y")) {
+        if (!std::cin.fail() &&
+            (continueGame == "N" || continueGame == "Y" || continueGame == "n" || continueGame == "y")) {
             std::cin.clear();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             if (continueGame == "N" || continueGame == "n") {
                 std::cout << "Thank you for playing!\n";
                 return false;
@@ -42,9 +43,6 @@ bool isContinueGame() {
             std::cout << "Invalid input, try again.\n";
         }
     }
-    //Won't reach
-    std::cout << "Reach\n";
-    return false;
 }
 
 sf::TcpSocket socket;
@@ -61,7 +59,7 @@ int main() {
     /**
      * Establish connection to server
      */
-    
+
     std::string ipAddr = "127.0.0.1";
     int portNumber = 53000;
     sf::Socket::Status status = socket.connect(ipAddr, portNumber);

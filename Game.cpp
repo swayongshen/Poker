@@ -2,15 +2,13 @@
 #include <unordered_map>
 #include <map>
 #include <unordered_set>
-#include <algorithm>
 #include <iostream>
 #include <sstream>
-#include <limits>
 #include <atomic>
 #include <SFML/Network.hpp>
 #include <SFML/Network/Packet.hpp>
-#include <mutex>
 #include <thread>
+#include <numeric>
 
 #include "Game.h"
 #include "Card.h"
@@ -19,60 +17,75 @@
  * Public methods
  * -----------------------------------------------
  */
-Game::Game() {
+Game::Game(std::shared_ptr<Printer> printer) : deck(printer) {
     this->players = std::vector<Player>();
-    this->deck = Deck();
     this->table = std::vector<Card>();
     this->pot = 0;
     this->bets = std::vector<int>();
     this->playerClients = std::vector<std::unique_ptr<sf::TcpSocket>>();
     this->waitingPlayers = std::vector<std::pair<std::string, std::unique_ptr<sf::TcpSocket>>>();
+    this->printer = printer;
 }
 
-void Game::acceptConnections(std::unique_ptr<sf::TcpListener> listenerPtr, int maxPlayers, std::atomic<bool>& isStop) {
+void Game::acceptConnections(std::unique_ptr<sf::TcpListener> listenerPtr, int maxPlayers, std::atomic<bool> &isStop) {
     try {
-        std::cout << "Thread started\n";
-        sf::TcpListener& listener = *listenerPtr;
-        while (numPlayers < maxPlayers && !isStop) {
-
+        sf::TcpListener &listener = *listenerPtr;
+        // TODO instead of break out of loop, have a condition variable to restart
+        // acceptance of new players if numPlayers <maxPlayers again
+        int nowNumPlayers = this->getNumPlayers();
+        while (nowNumPlayers < maxPlayers && !isStop) {
             // accept a new connection
             std::unique_ptr<sf::TcpSocket> clientPtr = std::make_unique<sf::TcpSocket>();
-            sf::TcpSocket& client = *clientPtr;
+            sf::TcpSocket &client = *clientPtr;
             if (listener.accept(client) != sf::Socket::Done) {
-                std::cout << "Error accepting new connection\n";
-            } else {
-                std::string playerName;
-                receiveMsg(client) >> playerName;
-                if (numPlayers < 2) {
-                    sendMsg(client, "WAIT");
-                }
-                waitingPlayersMutex.lock();
-                waitingPlayers.push_back(std::make_pair(playerName, std::move(clientPtr)));
-                waitingPlayersMutex.unlock();
-                std::cout << playerName + " has joined the game.\n";
-                numPlayersMutex.lock();
-                numPlayers += 1;
-                numPlayersMutex.unlock();
-                
+                this->printer->print("Error accepting new connection\n");
+                continue;
             }
+
+            std::string playerName;
+            receiveMsg(client) >> playerName;
+            if (nowNumPlayers < 2) {
+                sendMsg(client, "WAIT");
+            }
+            {
+                std::lock_guard<std::mutex> lg(this->waitingPlayersMutex);
+                waitingPlayers.emplace_back(playerName, std::move(clientPtr));
+                std::lock_guard<std::mutex> numPlayersLg(this->numPlayersMutex);
+                numPlayers += 1;
+            }
+            this->printer->print(playerName + " has joined the game.\n");
+            this->waitPlayerCv.notify_all();
         }
         listener.close();
-        std::cout << "Thread stopped\n";
+        this->printer->print("Thread stopped\n");
     } catch (...) {
-        std::cout << "Thread error!\n";
+        this->printer->print("Thread error!\n");
     }
+}
+
+void Game::waitForEnoughPlayers() {
+    std::unique_lock<std::mutex> lk(this->waitPlayerCvMutex);
+    this->waitPlayerCv.wait(lk, [this] {
+        checkConnectedAll();
+        {
+            std::lock_guard<std::mutex> lg(numPlayersMutex);
+            printer->print(this->numActivePlayers);
+            return this->numActivePlayers >= 2;
+        }
+    });
 }
 
 void Game::acceptWaitingPlayers() {
-    waitingPlayersMutex.lock();
-    playerClientsMutex.lock();
-    for (int i = 0; i < waitingPlayers.size(); i++) {
-        addPlayer(waitingPlayers[i].first, 500);
-        playerClients.push_back(std::move(waitingPlayers[i].second));
+    {
+        std::lock_guard<std::mutex> waitingPlayersGuard(waitingPlayersMutex);
+        {
+            for (int i = 0; i < waitingPlayers.size(); i++) {
+                addPlayer(waitingPlayers[i].first, 500);
+                playerClients.push_back(std::move(waitingPlayers[i].second));
+            }
+        }
+        waitingPlayers = std::vector<std::pair<std::string, std::unique_ptr<sf::TcpSocket>>>();
     }
-    waitingPlayers = std::vector<std::pair<std::string, std::unique_ptr<sf::TcpSocket>>>();
-    waitingPlayersMutex.unlock();
-    playerClientsMutex.unlock();
 }
 
 void Game::addPlayer(std::string name, int chips) {
@@ -88,7 +101,7 @@ void Game::firstDeal() {
 }
 
 void Game::restartDeck() {
-    this->deck = Deck();
+    this->deck = Deck(printer);
 }
 
 void Game::blindsBid(int smallBlindAmt) {
@@ -99,32 +112,32 @@ void Game::blindsBid(int smallBlindAmt) {
 void Game::rotatePlayersLeft(int d) {
     int n = players.size();
     /* To handle if d >= n */
-    d = d % n; 
-    int g_c_d = std::__gcd(d, n); 
+    d = d % n;
+    int g_c_d = std::gcd(d, n);
     playerClientsMutex.lock();
-    for (int i = 0; i < g_c_d; i++) { 
+    for (int i = 0; i < g_c_d; i++) {
         /* move i-th values of blocks */
         Player temp = players[i];
         std::unique_ptr<sf::TcpSocket> temp2 = std::move(playerClients[i]);
         int j = i;
-  
-        while (1) { 
-            int k = j + d; 
-            if (k >= n) 
-                k = k - n; 
-  
-            if (k == i) 
-                break; 
-  
+
+        while (1) {
+            int k = j + d;
+            if (k >= n)
+                k = k - n;
+
+            if (k == i)
+                break;
+
             players[j] = players[k];
             playerClients[j] = std::move(playerClients[k]);
-            
-            j = k; 
+
+            j = k;
         }
         players[j] = temp;
         playerClients[j] = std::move(temp2);
 
-    } 
+    }
     playerClientsMutex.unlock();
 }
 
@@ -143,7 +156,7 @@ void Game::bet(int playerIndex, int amt) {
             pot += amt;
         }
     } catch (std::string exception) {
-        std::cout << exception << std::endl;
+        this->printer->print(exception);
     }
 }
 
@@ -155,14 +168,14 @@ void Game::broadcastMsg(std::string msg) {
 
 void Game::displayTable() {
     std::string output;
-    output += "------------------------------\n"; 
-    output += "Table:\n" ;
-    
+    output += "------------------------------\n";
+    output += "Table:\n";
+
     //Print all cards on table if any.
-    for (Card card : table) {
+    for (Card card: table) {
         output << card;
     }
-    
+
     output += "\n\n";
     output += "Pot: $" + std::to_string(pot) + "\n";
     output += "------------------------------\n";
@@ -172,12 +185,12 @@ void Game::displayTable() {
 
 void Game::displayTableAndHand() {
     displayTable();
-    
+
     for (int playerIndex = 0; playerIndex < players.size(); playerIndex++) {
         std::string output;
         output = "Your hand:\n";
         std::vector<Card> hand = players[playerIndex].getHand();
-        for (Card card : hand) {
+        for (Card card: hand) {
             output << card;
         }
         output += "\nYour chips: $" + std::to_string(players[playerIndex].getChipAmt()) + "\n";
@@ -193,7 +206,7 @@ void Game::displayTableAndAllUnfoldHands() {
         if (bets[i] != -1) {
             output += players[i].getName() + ": ";
             std::vector<Card> hand = players[i].getHand();
-            for (Card card : hand) {
+            for (Card card: hand) {
                 output << card;
             }
         }
@@ -206,7 +219,7 @@ void Game::displayTableAndAllUnfoldHands() {
 void Game::printStatus(std::string status) {
     std::string output;
     output += "/****************************\\\n";
-    output += std::string((30 - status.size())/2, ' ');
+    output += std::string((30 - status.size()) / 2, ' ');
     output += status += "\n";
     output += "\\****************************/\n";
     broadcastMsg(output);
@@ -304,11 +317,11 @@ void Game::awardWinners() {
         }
 
         //Determine who wins each bet amount
-        for (auto& pair : betsMap) {
+        for (auto &pair: betsMap) {
 
             //Get the players who won this bet amount
             std::vector<int> topPlayers;
-            for (int playerIndex : playersInvolved) {
+            for (int playerIndex: playersInvolved) {
                 if (topPlayers.size() != 0) {
                     if (handRanks[playerIndex] > handRanks[topPlayers[0]]) {
                         topPlayers = {playerIndex};
@@ -323,22 +336,22 @@ void Game::awardWinners() {
             //Distribute the money which is bet amount * num of players involved
             int totalAmount = pair.first * playersInvolved.size();
             int splitAmt = (int) (totalAmount / topPlayers.size());
-            for (int winningPlayerIdx : topPlayers) {
+            for (int winningPlayerIdx: topPlayers) {
                 players[winningPlayerIdx].awardChips(splitAmt);
                 winAmt[winningPlayerIdx] += splitAmt;
             }
 
             //Remove the people who bet this amount as they do not qualify for the next amounts.
-            for (int playerIdx : pair.second) {
+            for (int playerIdx: pair.second) {
                 playersInvolved.erase(playerIdx);
             }
-            
+
             //Deduct the bet amount from the rest of bets.
-            for (auto& otherPair : betsMap) {
+            for (auto &otherPair: betsMap) {
                 int originalBetAmt = otherPair.first;
                 std::vector<int> playersWhoBetThisAmt = otherPair.second;
                 betsMap.erase(originalBetAmt);
-                betsMap[originalBetAmt - pair.first] = playersWhoBetThisAmt; 
+                betsMap[originalBetAmt - pair.first] = playersWhoBetThisAmt;
             }
         }
     }
@@ -350,7 +363,7 @@ void Game::awardWinners() {
         }
     }
 
-    
+
     printStatus("GAME ENDED");
 }
 
@@ -364,7 +377,7 @@ void Game::resetCards() {
     this->table = std::vector<Card>();
 }
 
-void Game::playersIsContinue() {
+void Game::confirmIfPlayersWantToContinue() {
     broadcastMsg("END");
     /** 
      * Broadcasting "END" invokes a Y/N response from client. If client press N, 0 is sent from client
@@ -375,14 +388,14 @@ void Game::playersIsContinue() {
         int response;
         receivePkt >> response;
         if (response == 0) {
-            sf::TcpSocket& clientSocket = *playerClients[playerIndex];
+            sf::TcpSocket &clientSocket = *playerClients[playerIndex];
             clientSocket.disconnect();
-            std::cout << "Player " + players[playerIndex].name + " has left the game.\n";
+            this->printer->print("Player " + players[playerIndex].name + " has left the game.\n");
             playerClients.erase(playerClients.begin() + playerIndex);
             players.erase(players.begin() + playerIndex);
             playerIndex -= 1;
         } else {
-            std::cout << "Player " + players[playerIndex].name + " wants to continue.\n";
+            this->printer->print("Player " + players[playerIndex].name + " wants to continue.\n");
         }
     }
 }
@@ -390,37 +403,40 @@ void Game::playersIsContinue() {
 
 void Game::checkConnectedAll() {
     acceptWaitingPlayers();
-    playerClientsMutex.lock();
-    for (int playerIndex = 0; playerIndex < players.size(); playerIndex++) {
-        sf::TcpSocket& clientSocket = *playerClients[playerIndex];
-        sendMsg(clientSocket, "CHECK");
-        sf::Packet receivePkt;
-        sf::SocketSelector selector;
-        selector.add(clientSocket);
-        if (selector.wait(sf::seconds(2.0))) {
-            receivePkt = receiveMsg(clientSocket);
-        };
-        int pktSize = receivePkt.getDataSize();
-        int response;
-        receivePkt >> response;
-        //Exclude players who did not provide valid response
-        if (pktSize == 0 || response != 1) {
-            clientSocket.disconnect();
-            std::cout << "Player " + players[playerIndex].name + " has disconnected.\n";
-            playerClients.erase(playerClients.begin() + playerIndex);
-            players.erase(players.begin() + playerIndex);
-            playerIndex -=1 ;
+    {
+//        std::lock_guard<std::mutex> lg(playerClientsMutex);
+        for (int playerIndex = 0; playerIndex < players.size(); playerIndex++) {
+            sf::TcpSocket &clientSocket = *playerClients[playerIndex];
+            sendMsg(clientSocket, "CHECK");
+            sf::Packet receivePkt;
+            sf::SocketSelector selector;
+            selector.add(clientSocket);
+            if (selector.wait(sf::seconds(2.0))) {
+                receivePkt = receiveMsg(clientSocket);
+            };
+            int pktSize = receivePkt.getDataSize();
+            int response;
+            receivePkt >> response;
+            //Exclude players who did not provide valid response
+            if (pktSize == 0 || response != 1) {
+                clientSocket.disconnect();
+                this->printer->print("Player " + players[playerIndex].name + " has disconnected.\n");
+                playerClients.erase(playerClients.begin() + playerIndex);
+                players.erase(players.begin() + playerIndex);
+                playerIndex -= 1;
+            }
         }
     }
-
-    playerClientsMutex.unlock();
-    
-    numPlayersMutex.lock();
-    
+    std::lock_guard<std::mutex> lg(numPlayersMutex);
     numPlayers = players.size();
     numActivePlayers = numPlayers;
-    numPlayersMutex.unlock();
 }
+
+int Game::getNumPlayers() {
+    std::lock_guard<std::mutex> lg(numPlayersMutex);
+    return numPlayers;
+}
+
 /**
  * Private methods
  * -------------------------------------------
@@ -433,13 +449,13 @@ Game::Player::Player(std::string name, int chips) {
 
 Game::Player::Player(std::string name, std::vector<Card> hand, int chips) {
     this->name = name;
-    this-> hand = hand;
+    this->hand = hand;
     this->chips = chips;
 }
 
 Game::Player Game::Player::receiveDeal(std::vector<Card> cards) {
     std::vector<Card> newHand = hand;
-    for (Card& card : cards) {
+    for (Card &card: cards) {
         newHand.push_back(card);
     }
     return Player(name, newHand, chips);
@@ -450,7 +466,7 @@ Game::Player Game::Player::bet(int amt) {
     return Player(name, hand, newChipsAmt);
 }
 
-std::vector<Card>& Game::Player::getHand() {
+std::vector<Card> &Game::Player::getHand() {
     return hand;
 }
 
@@ -476,13 +492,13 @@ Card Game::draw() {
 
 std::vector<Card> Game::loadHandAndTable(Player player) {
     std::vector<Card> loaded;
-    for (Card card : table) {
+    for (Card card: table) {
         loaded.push_back(card);
-        if(card.getRank() == 1) {
+        if (card.getRank() == 1) {
             loaded.push_back(Card(card.getSuit(), 14));
         }
     }
-    for (Card card : player.getHand()) {
+    for (Card card: player.getHand()) {
         loaded.push_back(card);
         if (card.getRank() == 1) {
             loaded.push_back(Card(card.getSuit(), 14));
@@ -493,17 +509,20 @@ std::vector<Card> Game::loadHandAndTable(Player player) {
 
 std::vector<int> Game::hasFlush(Player player) {
     if (table.size() >= 3) {
-        std::unordered_map<Suit, int> countSuits = {{Club, 0}, {Diamond, 0}, {Heart,0}, {Spade,0}};
+        std::unordered_map<Suit, int> countSuits = {{Club,    0},
+                                                    {Diamond, 0},
+                                                    {Heart,   0},
+                                                    {Spade,   0}};
         std::vector<Card> cards;
-        for (Card card : table) {
+        for (Card card: table) {
             countSuits[card.getSuit()] += 1;
             cards.push_back(card);
         }
-        for (Card card : player.getHand()) {
+        for (Card card: player.getHand()) {
             countSuits[card.getSuit()] += 1;
             cards.push_back(card);
         }
-        for (auto const& pair : countSuits) {
+        for (auto const &pair: countSuits) {
             //For the suit that has more than or equal to 5 cards
             if (pair.second >= 5) {
                 std::vector<int> cardsOfSuit;
@@ -527,19 +546,19 @@ std::vector<int> Game::hasFlush(Player player) {
 
 int Game::hasNConsecutive(std::vector<int> cardRanks, int n) {
     std::unordered_set<int> num_set;
-    for (int num : cardRanks) {
+    for (int num: cardRanks) {
         num_set.insert(num);
     }
 
     int longestStreak = 0;
     int currMaxNum = -1;
 
-    for (int num : num_set) {
-        if (num_set.find(num-1) == num_set.end()) {
+    for (int num: num_set) {
+        if (num_set.find(num - 1) == num_set.end()) {
             int currentNum = num;
             int currentStreak = 1;
 
-            while (num_set.find(currentNum+1) != num_set.end()) {
+            while (num_set.find(currentNum + 1) != num_set.end()) {
                 currentNum += 1;
                 currentStreak += 1;
             }
@@ -569,7 +588,7 @@ int Game::hasStraight(Player player) {
 /*
 * For each card that has the same rank as the straight high card,
 * check if there is 5 of the suit of that card.
-*/ 
+*/
 int Game::hasStraightFlush(Player player) {
     //Check if each card in the straight is all part of same suit.
     std::vector<int> playerHasFlush = hasFlush(player);
@@ -583,11 +602,11 @@ int Game::hasStraightFlush(Player player) {
 std::vector<int> Game::hasPairTripsQuads(Player player) {
     std::vector<Card> cards = loadHandAndTable(player);
     std::unordered_map<int, int> countRank;
-    for (Card card : cards) {
+    for (Card card: cards) {
         countRank[card.getRank()] += 1;
     }
     std::vector<int> currHighest = {-1, -1, -1};
-    for (auto& pair : countRank) {
+    for (auto &pair: countRank) {
         for (int i = 2; i <= 4; i++) {
             if (pair.second >= i) {
                 currHighest[i - 2] = std::max(currHighest[i - 2], pair.first);
@@ -600,14 +619,14 @@ std::vector<int> Game::hasPairTripsQuads(Player player) {
 std::vector<int> Game::hasFullHouse(Player player) {
     std::vector<Card> cards = loadHandAndTable(player);
     std::unordered_map<int, int> countRank;
-    for (Card card : cards) {
+    for (Card card: cards) {
         countRank[card.getRank()] += 1;
     }
     //Find highest triple and highest pair
     int highestTriple = -1;
     int highestPair = -1;
 
-    for (auto& pair : countRank) {
+    for (auto &pair: countRank) {
         if (pair.second >= 3 && pair.first > highestTriple) {
             highestTriple = pair.first;
         }
@@ -627,13 +646,13 @@ std::vector<int> Game::hasFullHouse(Player player) {
 std::vector<int> Game::hasTwoPair(Player player) {
     std::vector<Card> cards = loadHandAndTable(player);
     std::unordered_map<int, int> countRank;
-    for (Card card : cards) {
+    for (Card card: cards) {
         countRank[card.getRank()] += 1;
     }
     int currHighest = -1;
     int currSecondHighest = -1;
 
-    for (auto& pair : countRank) {
+    for (auto &pair: countRank) {
         if (pair.second >= 2 && pair.first >= currSecondHighest) {
             if (pair.first > currHighest) {
                 currSecondHighest = currHighest;
@@ -649,7 +668,7 @@ std::vector<int> Game::hasTwoPair(Player player) {
 int Game::getHighCard(Player player) {
     std::vector<Card> cards = loadHandAndTable(player);
     int highCard = cards[0].getRank();
-    for (Card card : cards) {
+    for (Card card: cards) {
         highCard = std::max(highCard, card.getRank());
     }
     return highCard;
@@ -663,7 +682,7 @@ int Game::handRank(Player player) {
         //If rank of highest card is Ace it is royal flush
         return playerHasStraightFlush == 14 ? 1000 + playerHasStraightFlush : 900 + playerHasStraightFlush;
     }
-    
+
     //Four of a kind/Quads
     std::vector<int> playerHasPairTripsQuads = hasPairTripsQuads(player);
     if (playerHasPairTripsQuads[2] != -1) {
@@ -680,7 +699,7 @@ int Game::handRank(Player player) {
     std::vector<int> playerHasFlush = hasFlush(player);
     if (playerHasFlush[0] != -1) {
         int sum_of_ranks = 0;
-        for (int n : playerHasFlush) sum_of_ranks += n;
+        for (int n: playerHasFlush) sum_of_ranks += n;
         return 600 + sum_of_ranks;
     }
 
@@ -704,8 +723,8 @@ int Game::handRank(Player player) {
     //Pair
     if (playerHasPairTripsQuads[0] != -1) {
         return 200 + playerHasPairTripsQuads[0];
-    
-    //High card
+
+        //High card
     } else {
         return 100 + getHighCard(player);
     }
@@ -725,13 +744,17 @@ int compareInt(int A, int B) {
 int Game::compareKickers(std::vector<int> cardsToRemove, int limitOfKickers, Player playerA, Player playerB) {
     std::vector<Card> playerACards = loadHandAndTable(playerA);
     std::vector<int> playerACardsLeftover;
-    std::for_each(playerACards.begin(), playerACards.end(), [&playerACardsLeftover, &cardsToRemove] (Card card) {
-        if (std::find(cardsToRemove.begin(), cardsToRemove.end(), card.getRank()) == cardsToRemove.end()) playerACardsLeftover.push_back(card.getRank());
+    std::for_each(playerACards.begin(), playerACards.end(), [&playerACardsLeftover, &cardsToRemove](Card card) {
+        if (std::find(cardsToRemove.begin(), cardsToRemove.end(), card.getRank()) ==
+            cardsToRemove.end())
+            playerACardsLeftover.push_back(card.getRank());
     });
     std::vector<Card> playerBCards = loadHandAndTable(playerB);
     std::vector<int> playerBCardsLeftover;
-        std::for_each(playerBCards.begin(), playerBCards.end(), [&playerBCardsLeftover, &cardsToRemove] (Card card) {
-        if (std::find(cardsToRemove.begin(), cardsToRemove.end(), card.getRank()) == cardsToRemove.end()) playerBCardsLeftover.push_back(card.getRank());
+    std::for_each(playerBCards.begin(), playerBCards.end(), [&playerBCardsLeftover, &cardsToRemove](Card card) {
+        if (std::find(cardsToRemove.begin(), cardsToRemove.end(), card.getRank()) ==
+            cardsToRemove.end())
+            playerBCardsLeftover.push_back(card.getRank());
     });
     std::sort(playerACardsLeftover.begin(), playerACardsLeftover.end());
     std::sort(playerBCardsLeftover.begin(), playerBCardsLeftover.end());
@@ -745,13 +768,13 @@ int Game::compareKickers(std::vector<int> cardsToRemove, int limitOfKickers, Pla
 
 //Helper function to split string
 std::vector<std::string> split(const std::string &s, char delim) {
-  std::stringstream ss(s);
-  std::string item;
-  std::vector<std::string> elems;
-  while (std::getline(ss, item, delim)) {
-    elems.push_back(std::move(item)); // if C++11 (based on comment from @mchiasson)
-  }
-  return elems;
+    std::stringstream ss(s);
+    std::string item;
+    std::vector<std::string> elems;
+    while (std::getline(ss, item, delim)) {
+        elems.push_back(std::move(item)); // if C++11 (based on comment from @mchiasson)
+    }
+    return elems;
 }
 
 int Game::act(int playerIndex) {
@@ -772,13 +795,13 @@ int Game::act(int playerIndex) {
         if (currBet == bets[playerIndex]) {
             promptString += "Enter K to check your current bet of: $" + std::to_string(currBet) + ",\n";
         } else {
-            promptString += "Enter C to call the current highest bet of: $" + std::to_string(currBet) + ",\n";      
+            promptString += "Enter C to call the current highest bet of: $" + std::to_string(currBet) + ",\n";
         }
-        promptString += "Enter R X to raise/make a higher bet by $X e.g. R 40,\n"; 
+        promptString += "Enter R X to raise/make a higher bet by $X e.g. R 40,\n";
         promptString += "Enter F to fold your hand\n";
         sendMsg(playerIndex, promptString);
-        
-        sf::TcpSocket& playerSocket = *playerClients[playerIndex];
+
+        sf::TcpSocket &playerSocket = *playerClients[playerIndex];
         std::string input;
         sf::Packet receivePkt = receiveMsg(playerSocket);
         if (receivePkt.getDataSize() == 0) {
@@ -787,23 +810,23 @@ int Game::act(int playerIndex) {
             return -1;
         }
         receivePkt >> input;
-        
+
         //Calling
         if (input == "C" || input == "c" && currBet > bets[playerIndex]) {
-                broadcastMsg("Player " + players[playerIndex].name + " calls.\n");
-                bet(playerIndex, (currBet - bets[playerIndex]));
-                return 0;
-        //Folding
+            broadcastMsg("Player " + players[playerIndex].name + " calls.\n");
+            bet(playerIndex, (currBet - bets[playerIndex]));
+            return 0;
+            //Folding
         } else if (input == "F" || input == "f") {
             broadcastMsg("Player " + players[playerIndex].name + " folds.\n");
             bets[playerIndex] = -1;
             return -1;
-        //Raising
+            //Raising
         } else if (input.length() > 1 && split(input, ' ')[0] == "R" || split(input, ' ')[0] == "r") {
             int raiseAmt = std::stoi(split(input, ' ')[1]);
-            if (players[playerIndex].getChipAmt() >= currBet - bets[playerIndex]+ raiseAmt) {
-                broadcastMsg("Player " + players[playerIndex].name + " raises the bid by $" + std::to_string(raiseAmt) 
-                    + " to $" + std::to_string(currBet + raiseAmt) + "\n");
+            if (players[playerIndex].getChipAmt() >= currBet - bets[playerIndex] + raiseAmt) {
+                broadcastMsg("Player " + players[playerIndex].name + " raises the bid by $" + std::to_string(raiseAmt)
+                             + " to $" + std::to_string(currBet + raiseAmt) + "\n");
                 bet(playerIndex, (currBet + raiseAmt) - bets[playerIndex]);
                 return 1;
             } else {
@@ -815,7 +838,7 @@ int Game::act(int playerIndex) {
         } else {
             sendMsg(playerSocket, "Invalid input, please try again.\n");
         }
-    }  
+    }
 }
 
 int Game::round(int playerIndex) {
@@ -900,24 +923,24 @@ int Game::compareHands(Player playerA, Player playerB) {
 }
 
 void Game::sendMsg(int clientIndex, std::string msg) {
-    sf::TcpSocket& clientSocket = *playerClients[clientIndex];
+    sf::TcpSocket &clientSocket = *playerClients[clientIndex];
     sendMsg(clientSocket, msg);
 }
 
-void Game::sendMsg(sf::TcpSocket& clientSocket, std::string msg) {
+void Game::sendMsg(sf::TcpSocket &clientSocket, std::string msg) {
     sf::Packet sendPkt;
     sendPkt << msg;
     clientSocket.send(sendPkt);
 }
 
-sf::Packet Game::receiveMsg(sf::TcpSocket& clientSocket) {
+sf::Packet Game::receiveMsg(sf::TcpSocket &clientSocket) {
     sf::Packet receivePkt;
     clientSocket.receive(receivePkt);
     return receivePkt;
 }
 
 sf::Packet Game::receiveMsg(int clientIndex) {
-    sf::TcpSocket& clientSocket = *playerClients[clientIndex];
+    sf::TcpSocket &clientSocket = *playerClients[clientIndex];
     return receiveMsg(clientSocket);
 }
 
