@@ -180,6 +180,8 @@ private:
         Player resetHand();
     };
 
+    std::condition_variable numPlayersCv;
+
     // Stdio printing util
     std::shared_ptr<Printer> printer;
 

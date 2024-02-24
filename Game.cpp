@@ -30,10 +30,14 @@ Game::Game(std::shared_ptr<Printer> printer) : deck(printer) {
 void Game::acceptConnections(std::unique_ptr<sf::TcpListener> listenerPtr, int maxPlayers, std::atomic<bool> &isStop) {
     try {
         sf::TcpListener &listener = *listenerPtr;
-        // TODO instead of break out of loop, have a condition variable to restart
-        // acceptance of new players if numPlayers <maxPlayers again
         int nowNumPlayers = this->getNumPlayers();
-        while (nowNumPlayers < maxPlayers && !isStop) {
+        while (!isStop) {
+            std::unique_lock<std::mutex> lk(this->numPlayersMutex);
+            this->numPlayersCv.wait(lk, [this, maxPlayers]() {
+                return this->numPlayers < maxPlayers;
+            });
+            lk.unlock();
+
             // accept a new connection
             std::unique_ptr<sf::TcpSocket> clientPtr = std::make_unique<sf::TcpSocket>();
             sf::TcpSocket &client = *clientPtr;
@@ -50,6 +54,8 @@ void Game::acceptConnections(std::unique_ptr<sf::TcpListener> listenerPtr, int m
             {
                 std::lock_guard<std::mutex> lg(this->waitingPlayersMutex);
                 waitingPlayers.emplace_back(playerName, std::move(clientPtr));
+            }
+            {
                 std::lock_guard<std::mutex> numPlayersLg(this->numPlayersMutex);
                 numPlayers += 1;
             }
@@ -427,9 +433,11 @@ void Game::checkConnectedAll() {
             }
         }
     }
-    std::lock_guard<std::mutex> lg(numPlayersMutex);
-    numPlayers = players.size();
-    numActivePlayers = numPlayers;
+    {
+        std::lock_guard<std::mutex> lg(numPlayersMutex);
+        numPlayers = players.size();
+        numActivePlayers = numPlayers;
+    }
 }
 
 int Game::getNumPlayers() {
