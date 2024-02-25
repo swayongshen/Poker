@@ -30,15 +30,15 @@ Game::Game(std::shared_ptr<Printer> printer) : deck(printer) {
 void Game::acceptConnections(std::unique_ptr<sf::TcpListener> listenerPtr, int maxPlayers, std::atomic<bool> &isStop) {
     try {
         sf::TcpListener &listener = *listenerPtr;
-        int nowNumPlayers = this->getNumPlayers();
         while (!isStop) {
+            // Wait until numPlayers < maxPlayers to accept a new player
             std::unique_lock<std::mutex> lk(this->numPlayersMutex);
             this->numPlayersCv.wait(lk, [this, maxPlayers]() {
                 return this->numPlayers < maxPlayers;
             });
             lk.unlock();
 
-            // accept a new connection
+            // Accept a new connection, blocking until {accept} returns
             std::unique_ptr<sf::TcpSocket> clientPtr = std::make_unique<sf::TcpSocket>();
             sf::TcpSocket &client = *clientPtr;
             if (listener.accept(client) != sf::Socket::Done) {
@@ -46,18 +46,22 @@ void Game::acceptConnections(std::unique_ptr<sf::TcpListener> listenerPtr, int m
                 continue;
             }
 
+            // Get player name
             std::string playerName;
             receiveMsg(client) >> playerName;
-            if (nowNumPlayers < 2) {
-                sendMsg(client, "WAIT");
-            }
+
+            // Add new player to list of waiting players
             {
                 std::lock_guard<std::mutex> lg(this->waitingPlayersMutex);
                 waitingPlayers.emplace_back(playerName, std::move(clientPtr));
             }
+
             {
                 std::lock_guard<std::mutex> numPlayersLg(this->numPlayersMutex);
                 numPlayers += 1;
+                if (numPlayers < 2) {
+                    sendMsg(client, "WAIT");
+                }
             }
             this->printer->print(playerName + " has joined the game.\n");
             this->waitPlayerCv.notify_all();
@@ -85,9 +89,9 @@ void Game::acceptWaitingPlayers() {
     {
         std::lock_guard<std::mutex> waitingPlayersGuard(waitingPlayersMutex);
         {
-            for (int i = 0; i < waitingPlayers.size(); i++) {
-                addPlayer(waitingPlayers[i].first, 500);
-                playerClients.push_back(std::move(waitingPlayers[i].second));
+            for (auto &waitingPlayer: waitingPlayers) {
+                addPlayer(waitingPlayer.first, 500);
+                playerClients.push_back(std::move(waitingPlayer.second));
             }
         }
         waitingPlayers = std::vector<std::pair<std::string, std::unique_ptr<sf::TcpSocket>>>();
@@ -101,8 +105,8 @@ void Game::addPlayer(std::string name, int chips) {
 }
 
 void Game::firstDeal() {
-    for (int i = 0; i < players.size(); i++) {
-        players[i] = players[i].receiveDeal({deck.dealCard(), deck.dealCard()});
+    for (auto &player: players) {
+        player = player.receiveDeal({deck.dealCard(), deck.dealCard()});
     }
 }
 
@@ -120,14 +124,14 @@ void Game::rotatePlayersLeft(int d) {
     /* To handle if d >= n */
     d = d % n;
     int g_c_d = std::gcd(d, n);
-    playerClientsMutex.lock();
+    std::lock_guard<std::mutex> lg(playerClientsMutex);
     for (int i = 0; i < g_c_d; i++) {
         /* move i-th values of blocks */
         Player temp = players[i];
         std::unique_ptr<sf::TcpSocket> temp2 = std::move(playerClients[i]);
         int j = i;
 
-        while (1) {
+        while (true) {
             int k = j + d;
             if (k >= n)
                 k = k - n;
@@ -144,13 +148,12 @@ void Game::rotatePlayersLeft(int d) {
         playerClients[j] = std::move(temp2);
 
     }
-    playerClientsMutex.unlock();
 }
 
 void Game::bet(int playerIndex, int amt) {
     try {
         if (amt <= 0) {
-            throw ("Invalid bet, please bet more than $0.");
+            throw (std::invalid_argument("Invalid bet, please bet more than $0."));
         } else if (amt > players[playerIndex].getChipAmt()) {
             //If bet exceeds, then just bet everything
             players[playerIndex] = players[playerIndex].bet(players[playerIndex].getChipAmt());
@@ -161,12 +164,12 @@ void Game::bet(int playerIndex, int amt) {
             bets[playerIndex] += amt;
             pot += amt;
         }
-    } catch (std::string exception) {
+    } catch (std::string &exception) {
         this->printer->print(exception);
     }
 }
 
-void Game::broadcastMsg(std::string msg) {
+void Game::broadcastMsg(const std::string &msg) {
     for (int i = 0; i < players.size(); i++) {
         sendMsg(i, msg);
     }

@@ -75,7 +75,7 @@ public:
     /**
      * Sends a message to all players.
      */
-    void broadcastMsg(std::string msg);
+    void broadcastMsg(const std::string &msg);
 
     /**
      * Sends the state of the poker table (the community cards and the amount of chips in the pot) to all players:
