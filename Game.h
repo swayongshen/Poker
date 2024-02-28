@@ -10,6 +10,7 @@
 #include "Deck.h"
 #include "Card.h"
 #include "Printer.h"
+#include "Player.h"
 
 class Game {
 
@@ -39,11 +40,6 @@ public:
      * Moves waiting players from waiting list into the active list and empties waitign list
      */
     void acceptWaitingPlayers();
-
-    /**
-     * Create a new player with a name and a designated amount of chips and add it to the vector of players.
-     */
-    void addPlayer(std::string name, int chips);
 
     /**
      * Deals 2 pocket cards to all players
@@ -153,32 +149,7 @@ public:
     int getNumPlayers();
 
 private:
-    class Player {
-        friend class Game;
-
-        std::string name;
-        std::vector<Card> hand;
-        int chips;
-        bool hasFolded = false;
-
-        Player(std::string name, int chips);
-
-        Player(std::string name, std::vector<Card> hand, int chips);
-
-        Player receiveDeal(std::vector<Card> cards);
-
-        Player bet(int amt);
-
-        std::vector<Card> &getHand();
-
-        std::string getName();
-
-        int getChipAmt();
-
-        Player awardChips(int amt);
-
-        Player resetHand();
-    };
+    int const INITIAL_CHIPS = 500;
 
     std::condition_variable numPlayersCv;
 
@@ -188,14 +159,11 @@ private:
     //Stores Player objects of each active players.
     std::vector<Player> players;
 
-    //Stores the pointers to the TCP client sockets of each active player.
-    std::vector<std::unique_ptr<sf::TcpSocket>> playerClients;
-
     //Mutex to allow thread safety for playerClients.
     std::mutex playerClientsMutex;
 
     //Stores pointers to the TCP client sockets of waiting players.
-    std::vector<std::pair<std::string, std::unique_ptr<sf::TcpSocket>>> waitingPlayers;
+    std::vector<Player> waitingPlayers;
 
     //Mutex to allow thread safety for waitingPlayers.
     std::mutex waitingPlayersMutex;
@@ -222,12 +190,12 @@ private:
     /**
      * Returns a vector which contains all cards from table as well as the pocket cards from the player's hand.
      */
-    std::vector<Card> loadHandAndTable(Player player);
+    std::vector<Card> loadHandAndTable(Player &player);
 
     /**
      * Returns the ranks of the top 5 cards in the flush if any and {-1} if there is no flush.
      */
-    std::vector<int> hasFlush(Player player);
+    std::vector<int> hasFlush(Player &player);
 
 
     /**
@@ -240,13 +208,13 @@ private:
      * Returns the rank of the highest card in the straight if there is a straight.
      * Return -1 if there is no straight.
      */
-    int hasStraight(Player player);
+    int hasStraight(Player &player);
 
     /**
      * Returns the rank of the highest card in the straight flush if there is a straight flush.
      * Return -1 if there is no straight flush.
      */
-    int hasStraightFlush(Player player);
+    int hasStraightFlush(Player &player);
 
     //hasRoyalFlush is not needed because it is just hasStraightFlush which returns 14.
 
@@ -255,25 +223,25 @@ private:
      * b represents the highest three of a kind and c represents the highest quad.
      * If they have value of -1 it means none e.g. -1 for a means no pair found.
      */
-    std::vector<int> hasPairTripsQuads(Player player);
+    std::vector<int> hasPairTripsQuads(Player &player);
 
     /**
      * Returns {highest triple, highest pair} where the triple and the pair forms a full house and
      * returns {-1, -1} if there is no full house.
      */
-    std::vector<int> hasFullHouse(Player player);
+    std::vector<int> hasFullHouse(Player &player);
 
 
     /**
      * Returns {Highest pair, second highest pair} if any. Returns {-1, -1} for no pair
      * and {X, -1} if 1 pair of X is found and {X, Y} if 2 pairs X and Y are found and X > Y.
      */
-    std::vector<int> hasTwoPair(Player player);
+    std::vector<int> hasTwoPair(Player &player);
 
     /**
      * Returns the rank of the highest ranked card available to the player.
      */
-    int getHighCard(Player player);
+    int getHighCard(Player &player);
 
     /**
      * There are 10 types of poker hands. Returns XYY where X is the prefix which represents the type of hand
@@ -282,7 +250,7 @@ private:
      *
      * This is a preliminary rank, if 2 players have the same hand rank, we might have to compare kicker cards.
      */
-    int handRank(Player player);
+    int handRank(Player &player);
 
     /**
      * Compare up to limitOfKickers number of cards between playerA and playerB excluding the cards to remove from comparison.
@@ -291,7 +259,7 @@ private:
      *
      * Returns 1 if A > B, -1 if A < B and 0 if A == B.
      */
-    int compareKickers(std::vector<int> cardsToRemove, int limitOfKickers, Player playerA, Player playerB);
+    int compareKickers(std::vector<int> cardsToRemove, int limitOfKickers, Player &playerA, Player &playerB);
 
     /**
      * Prompts the player at playerIndex to input an action for his turn and processes it.
@@ -315,16 +283,11 @@ private:
      * Returns 0 if equal hands, 1 if playerA's hand is better than playerB's hand
      * and -1 if playerA's hand is worse than playerB's hand.
      */
-    int compareHands(Player playerA, Player playerB);
-
-    //Helper methods to send/receive message to client
-    void sendMsg(int clientIndex, std::string msg);
+    int compareHands(Player &playerA, Player &playerB);
 
     void sendMsg(sf::TcpSocket &clientSocket, std::string msg);
 
     sf::Packet receiveMsg(sf::TcpSocket &clientSocket);
-
-    sf::Packet receiveMsg(int clientIndex);
 };
 
 #endif
