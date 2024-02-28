@@ -285,6 +285,11 @@ private:
      */
     int compareHands(Player &playerA, Player &playerB);
 
+    /**
+     * Gets the hand ranking score for the hand of each player, and -1 if the player has folded
+     */
+    std::vector<int> getHandRanks();
+
     void sendMsg(sf::TcpSocket &clientSocket, std::string msg);
 
     sf::Packet receiveMsg(sf::TcpSocket &clientSocket);

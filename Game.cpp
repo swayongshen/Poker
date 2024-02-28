@@ -272,40 +272,21 @@ void Game::awardWinners() {
         winAmt[winnerIndex] += pot;
     } else {
         displayTableAndAllUnfoldHands();
-        std::vector<int> handRanks;
-        for (int i = 0; i < players.size(); i++) {
-            if (bets[i] != -1) {
-                handRanks.push_back(handRank(players[i]));
-            } else {
-                handRanks.push_back(-1);
-            }
-        }
-
-        for (int i = 0; i < players.size(); i++) {
-            if (handRanks[i] != -1) {
-                for (int j = 0; j < players.size(); j++) {
-                    if (i != j && handRanks[i] == handRanks[j]) {
-                        if (compareHands(players[i], players[j]) == 1) {
-                            handRanks[i] += 1;
-                        }
-                    }
-                }
-            }
-        }
+        std::vector<int> handRanks = getHandRanks();
 
         //Sort bets by increasing amount
         std::map<int, std::vector<int>> betsMap;
         std::unordered_set<int> playersInvolved;
 
-        //For each bet amount, handle it.
-        for (int i = 0; i < bets.size(); i++) {
-            if (bets[i] != -1) {
-                if (betsMap.count(bets[i]) == 0) {
-                    betsMap[bets[i]] = {i};
+        //For each bet amount, note the {playerIndex} that made that bet
+        for (int playerIndex = 0; playerIndex < players.size(); playerIndex++) {
+            if (bets[playerIndex] != -1) {
+                if (betsMap.count(bets[playerIndex]) == 0) {
+                    betsMap[bets[playerIndex]] = {playerIndex};
                 } else {
-                    betsMap[bets[i]].push_back(i);
+                    betsMap[bets[playerIndex]].push_back(playerIndex);
                 }
-                playersInvolved.insert(i);
+                playersInvolved.insert(playerIndex);
             }
         }
 
@@ -863,7 +844,6 @@ int Game::compareHands(Player &playerA, Player &playerB) {
 
         //Doesn't reach here
         return 0;
-
     }
 }
 
@@ -877,4 +857,30 @@ sf::Packet Game::receiveMsg(sf::TcpSocket &clientSocket) {
     sf::Packet receivePkt;
     clientSocket.receive(receivePkt);
     return receivePkt;
+}
+
+std::vector<int> Game::getHandRanks() {
+    std::vector<int> handRanks;
+    // First get the hand rank based on the hand of the players only
+    for (int i = 0; i < players.size(); i++) {
+        if (bets[i] != -1) {
+            handRanks.push_back(handRank(players[i]));
+        } else {
+            handRanks.push_back(-1);
+        }
+    }
+
+    // For players that have the same hand rank, compare their hands to determine the winner based on their kickers
+    for (int i = 0; i < players.size(); i++) {
+        if (handRanks[i] != -1) {
+            for (int j = 0; j < players.size(); j++) {
+                if (i != j && handRanks[i] == handRanks[j]) {
+                    if (compareHands(players[i], players[j]) == 1) {
+                        handRanks[i] += 1;
+                    }
+                }
+            }
+        }
+    }
+    return handRanks;
 }
