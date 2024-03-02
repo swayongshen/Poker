@@ -3,6 +3,7 @@
 //
 #include "Utils.h"
 #include <iostream>
+#include <limits>
 
 int Utils::getMaxNumPlayers() {
     this->printer->print("Enter the max number of players: ");

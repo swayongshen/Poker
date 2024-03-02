@@ -2,6 +2,7 @@
 #define DECK_H
 
 #include <vector>
+#include <memory>
 #include "Card.h"
 #include "Printer.h"
 

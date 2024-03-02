@@ -6,6 +6,7 @@
 #include <utility>
 #include <SFML/Network.hpp>
 #include <mutex>
+#include <condition_variable>
 
 #include "Deck.h"
 #include "Card.h"
@@ -15,19 +16,11 @@
 class Game {
 
 public:
-    Game(std::shared_ptr<Printer> printer);
+    explicit Game(const std::shared_ptr<Printer>& printer);
 
     int numPlayers = 0;
     std::mutex numPlayersMutex;
     int numActivePlayers = 0;
-
-    /**
-     * Constructors
-     */
-    Game(Printer &printer);
-
-    Game(const Game &); // non construction-copyable
-    Game &operator=(const Game &); // non copyable
 
     /**
      * This method is run in a separate thread to accept incoming TCP connections in the background and put them in a waiting list.

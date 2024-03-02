@@ -18,7 +18,7 @@
  * Public methods
  * -----------------------------------------------
  */
-Game::Game(std::shared_ptr<Printer> printer) : deck(printer) {
+Game::Game(const std::shared_ptr<Printer>& printer) : deck(printer) {
     this->pot = 0;
     this->printer = printer;
 }
